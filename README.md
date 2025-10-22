@@ -13,11 +13,7 @@ Angular Steering provides a principled approach to behavior modification in LLMs
 - Applying controlled angular rotations to steer model behavior
 - Maintaining model coherence while achieving targeted modifications
 
-<video width="640" height="360" controls>
-  <source src="./assets/demo.webm" type="video/webm">
-  Your browser does not support the video tag.
-</video>
-
+![Demo](./assets/demo.gif)
 
 
 ## Features
