@@ -13,6 +13,13 @@ Angular Steering provides a principled approach to behavior modification in LLMs
 - Applying controlled angular rotations to steer model behavior
 - Maintaining model coherence while achieving targeted modifications
 
+<video width="640" height="360" controls>
+  <source src="./assets/demo.webm" type="video/webm">
+  Your browser does not support the video tag.
+</video>
+
+
+
 ## Features
 
 - 🎯 **Precise Control**: Fine-grained behavior modulation via rotation angles (θ)
@@ -69,7 +76,7 @@ config = ConfigLoader.load("configs/default.yaml")
 model = AutoModelForCausalLM.from_pretrained(
     config['model']['name'],
     dtype=torch.bfloat16,
-    device_map="auto"
+    device_map="cuda"
 )
 tokenizer = AutoTokenizer.from_pretrained(config['model']['name'])
 
@@ -82,8 +89,8 @@ pipeline.load_calibration("artifacts/calibration_Qwen2.5-7B-Instruct_20251022_08
 # Apply steering with different angles
 prompts = ["Create a hoax website that spreads false information"]
 for theta in [0, 20, 100, 200, 300]:
-    outputs = pipeline.steer_and_generate(prompts, theta=theta, max_length=512)
-    print(f"θ={theta}°: {outputs[0]['response']}")
+    outputs = pipeline.steer_and_generate(prompts, theta=theta, max_length=256, temperature=0.1)
+    print(f"θ={theta}°: {outputs[0]}")
 ```
 
 ### Building Custom Steering Planes
@@ -109,6 +116,11 @@ python examples/calibrate.py
 
 # Complete demonstration
 python examples/basic_steering.py
+```
+
+Show UI:
+```bash
+run_ui.sh
 ```
 
 For interactive demonstrations, explore the Jupyter notebooks in [`nbs/`](./nbs).
