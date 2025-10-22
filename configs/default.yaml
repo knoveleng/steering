@@ -1,0 +1,63 @@
+# Default configuration for Angular Steering
+
+# Model configuration
+model:
+  name: "Qwen/Qwen2.5-7B-Instruct"
+  device: "cuda"
+  dtype: "bfloat16"
+
+# Generation parameters
+generation:
+  max_length: 256
+  temperature: 0.1
+  top_p: 0.9
+  do_sample: true
+
+# Chat template configuration
+chat_template:
+  enabled: true  # Set to true for instruct models
+  system_prompt: null #"You are a helpful and safe AI assistant."
+  add_generation_prompt: true
+
+
+# vLLM configuration
+vllm:
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.9
+  max_model_len: 2048
+
+# Data configuration
+data:
+  harmful_dataset: "data/advbench.json"
+  harmless_dataset: "data/alpaca.json"
+  harmful_samples: 416  # null for all
+  harmless_samples: 512
+
+# Feature direction extraction
+direction:
+  method: "diff_in_means"  # Options: diff_in_means, pca, ica
+  
+# Steering configuration
+steering:
+  mode: "standard"  # Options: standard, adaptive
+  threshold: 0.0  # For adaptive mode
+  cache_rotations: true
+
+# Layer selection (null for auto-detection)
+layers:
+  extraction_layers: null  # Will auto-detect normalization layers
+  target_layers: null  # Will use same as extraction
+
+# Evaluation
+evaluation:
+  theta_range:
+    start: 0
+    end: 360
+    step: 10
+  metrics:
+    - "refusal_score"
+
+artifacts_dir: "artifacts"
+analysis_dir: "analysis"
+save_artifacts: true
+run_analysis: true

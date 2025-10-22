@@ -1,0 +1,13 @@
+torch>=2.8.0
+hf_transfer>=0.1.9
+transformers>=4.57.1
+numpy>=2.2.6
+scikit-learn>=1.7.2
+matplotlib>=3.10.7
+PyYAML>=6.0.3
+tqdm>=4.67.1
+accelerate>=1.10.1
+sentencepiece>=0.2.1
+protobuf>=6.32.1
+plotly>=6.3.1
+kaleido>=1.1.0

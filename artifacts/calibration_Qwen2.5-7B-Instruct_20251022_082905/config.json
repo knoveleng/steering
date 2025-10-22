@@ -1,0 +1,55 @@
+{
+  "model": {
+    "name": "Qwen/Qwen2.5-7B-Instruct",
+    "device": "cuda",
+    "dtype": "bfloat16"
+  },
+  "generation": {
+    "max_length": 256,
+    "temperature": 0.0,
+    "top_p": 0.9,
+    "do_sample": true
+  },
+  "chat_template": {
+    "enabled": true,
+    "system_prompt": null,
+    "add_generation_prompt": true
+  },
+  "vllm": {
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.9,
+    "max_model_len": 2048
+  },
+  "data": {
+    "harmful_dataset": "data/advbench.json",
+    "harmless_dataset": "data/alpaca.json",
+    "harmful_samples": 416,
+    "harmless_samples": 512
+  },
+  "direction": {
+    "method": "diff_in_means"
+  },
+  "steering": {
+    "mode": "standard",
+    "threshold": 0.0,
+    "cache_rotations": true
+  },
+  "layers": {
+    "extraction_layers": null,
+    "target_layers": null
+  },
+  "evaluation": {
+    "theta_range": {
+      "start": 0,
+      "end": 360,
+      "step": 10
+    },
+    "metrics": [
+      "refusal_score"
+    ]
+  },
+  "artifacts_dir": "artifacts",
+  "analysis_dir": "analysis",
+  "save_artifacts": true,
+  "run_analysis": true
+}
