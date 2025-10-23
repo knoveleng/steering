@@ -15,8 +15,8 @@ class BasePlaneConstructor(ABC):
         self,
         feature_direction: torch.Tensor,
         candidates: Dict[str, torch.Tensor],
-        harmful_activations: torch.Tensor,
-        harmless_activations: torch.Tensor,
+        harmful_activations: Dict[str, torch.Tensor] = None,
+        harmless_activations: Dict[str, torch.Tensor] = None,
     ) -> None:
         """
         Construct steering plane from feature direction and candidates
@@ -24,6 +24,8 @@ class BasePlaneConstructor(ABC):
         Args:
             feature_direction: The selected feature direction
             candidates: All candidate directions
+            harmful_activations: Optional harmful activations for optimization
+            harmless_activations: Optional harmless activations for optimization
         """
         pass
     

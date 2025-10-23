@@ -166,14 +166,63 @@ class AngularSteeringPipeline:
 
         # Step 5: Construct steering plane
         self.logger.info("[5/6] Constructing steering plane...")
-        self.plane_constructor = SteeringPlaneConstructor(
-            self.feature_direction
-        )
-        self.plane_constructor.construct_plane(
-            self.feature_direction,
-            candidates
-        )
+        
+        # Choose plane constructor based on config
+        plane_method = self.config.get('plane_constructor', 'pca')  # 'pca' or 'grassmannian'
+        
+        if plane_method == 'grassmannian':
+            from ..plane import GrassmannianPlaneConstructor
+            
+            # Get Grassmannian hyperparameters from config
+            grassmann_config = self.config.get('grassmannian', {})
+            
+            self.plane_constructor = GrassmannianPlaneConstructor(
+                self.feature_direction,
+                alpha=grassmann_config.get('alpha', 1.0),
+                beta=grassmann_config.get('beta', 0.1),
+                lr=grassmann_config.get('lr', 0.1),
+                max_iterations=grassmann_config.get('max_iterations', 50),
+                convergence_threshold=grassmann_config.get('convergence_threshold', 1e-4),
+                use_geoopt=grassmann_config.get('use_geoopt', True),
+                verbose=True
+            )
+            
+            # Grassmannian optimization needs actual activations
+            self.plane_constructor.construct_plane(
+                self.feature_direction,
+                candidates,
+                harmful_acts,  # Pass activations for optimization
+                harmless_acts
+            )
+            
+            self.logger.info("  ✓ Optimized steering plane with Grassmannian method")
+            
+            # Log convergence info
+            q = self.plane_constructor.measure_contraction_constant()
+            if q is not None:
+                self.logger.info(f"  Empirical contraction constant: q = {q:.4f}")
+                if q < 1:
+                    self.logger.info("  ✓ Convergence guarantee satisfied (q < 1)")
+                else:
+                    self.logger.warning("  ⚠ Contraction constant >= 1 (may not converge)")
+        
+        else:
+            # Use original PCA-based constructor
+            from ..plane import SteeringPlaneConstructor
+            
+            self.plane_constructor = SteeringPlaneConstructor(
+                self.feature_direction
+            )
+            self.plane_constructor.construct_plane(
+                self.feature_direction,
+                candidates,
+                harmful_acts,  # Pass for compatibility
+                harmless_acts
+            )
+            self.logger.info("  ✓ Constructed 2D steering plane with PCA")
+        
         b1, b2 = self.plane_constructor.get_basis()
+        self.logger.info(f"  Basis vectors: b1.shape={b1.shape}, b2.shape={b2.shape}")
         self.logger.info("  ✓ Constructed 2D steering plane")
 
         # Store calibration data for later use by save_calibration_session()

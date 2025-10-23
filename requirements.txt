@@ -12,3 +12,4 @@ protobuf>=6.32.1
 plotly>=6.3.1
 kaleido>=1.1.0
 streamlit>=1.50.0
+geoopt>=0.5.0
