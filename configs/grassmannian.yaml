@@ -40,18 +40,37 @@ steering:
 plane_constructor: "grassmannian"  # Options: "pca" (default), "grassmannian"
 
 # Grassmannian optimization hyperparameters
+# Plane construction method
+plane_constructor: "grassmannian"  # Options: "pca" (default), "grassmannian"
+
+# Grassmannian optimization hyperparameters (FIXED)
 grassmannian:
   # Objective weights
   alpha: 1.0        # Separability weight (higher = prioritize separation)
-  beta: 0.1         # Preservation weight (higher = preserve more info)
+  beta: 0.5         # Focus weight (increased from 0.1 - higher = more feature alignment)
   
   # Optimization settings
-  lr: 0.05           # Learning rate for Riemannian optimization
-  max_iterations: 150
+  lr: 0.1           # Learning rate (increased from 0.05 for faster convergence)
+  max_iterations: 100  # Reduced from 150 (converges faster with correct objective)
   convergence_threshold: 0.0001
   
   # Implementation choice
   use_geoopt: true  # Use geoopt library (recommended) vs manual implementation
+  
+  # Adam optimizer settings
+  betas: [0.9, 0.999]  # Adam betas
+  
+  # Regularization
+  gradient_clip: 1.0  # Gradient clipping for stability
+  
+  # Learning rate schedule
+  use_lr_schedule: true  # Use cosine annealing
+  
+  # Early stopping
+  early_stopping_patience: 15
+  
+  # CRITICAL FIX: Do not normalize activations (preserves magnitude information)
+  normalize_activations: false
 
 # Layer selection (null for auto-detection)
 layers:

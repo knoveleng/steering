@@ -1,12 +1,13 @@
 """
-Grassmannian Plane Constructor with Adam Optimizer
+Grassmannian Plane Constructor
 
-IMPROVEMENTS:
-- Uses Adam optimizer (both geoopt and manual)
-- Fixed geoopt import (use Stiefel instead of Grassmann)
-- Adaptive learning rate with cosine annealing
-- Gradient clipping for stability
-- Early stopping
+Constructs optimal 2D steering plane via optimization on Grassmannian manifold.
+
+FIXED VERSION:
+- Correct objective sign (maximizes separability)
+- Uses FocusObjective instead of PreservationObjective
+- No normalization of activations
+- Passes feature_direction to objective
 """
 
 import torch
@@ -15,7 +16,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 
 from .base import BasePlaneConstructor
-from ..optimization import SeparabilityObjective, PreservationObjective, CombinedObjective
+from ..optimization import SeparabilityObjective, FocusObjective, CombinedObjective
 from ..optimization.manifold_utils import (
     project_to_grassmannian, 
     compute_grassmann_distance,
@@ -29,59 +30,39 @@ class RiemannianAdam:
     """
     Manual implementation of Riemannian Adam optimizer
     
-    Adapts the Adam optimizer to Riemannian manifolds by:
+    Adapts Adam to Riemannian manifolds by:
     1. Computing Riemannian gradients
     2. Applying Adam momentum and adaptive learning rates
-    3. Using Cayley retraction to stay on manifold
-    
-    Reference: "Riemannian Adaptive Optimization Methods" (ICLR 2019)
+    3. Using retraction for manifold updates
     """
     
-    def __init__(
-        self,
-        lr: float = 0.01,
-        betas: Tuple[float, float] = (0.9, 0.999),
-        eps: float = 1e-8
-    ):
-        """
-        Initialize Riemannian Adam optimizer
-        
-        Args:
-            lr: Learning rate
-            betas: Coefficients for computing running averages (beta1, beta2)
-            eps: Term for numerical stability
-        """
+    def __init__(self, lr: float = 0.01, betas: Tuple[float, float] = (0.9, 0.999), eps: float = 1e-8):
         self.lr = lr
         self.beta1, self.beta2 = betas
         self.eps = eps
         
         # State
-        self.m = None  # First moment estimate
-        self.v = None  # Second moment estimate
-        self.t = 0     # Timestep
+        self.m = None  # First moment
+        self.v = None  # Second moment
+        self.t = 0     # Time step
     
-    def step(
-        self,
-        basis: torch.Tensor,
-        grad: torch.Tensor
-    ) -> torch.Tensor:
+    def step(self, basis: torch.Tensor, grad: torch.Tensor) -> torch.Tensor:
         """
         Perform one optimization step
         
         Args:
-            basis: Current point on manifold (d_model, k)
-            grad: Riemannian gradient (d_model, k)
-        
+            basis: Current basis point on manifold
+            grad: Riemannian gradient at current point
+            
         Returns:
-            Updated basis after Adam step
+            Updated basis after optimization step
         """
-        # Initialize moments if first step
+        self.t += 1
+        
+        # Initialize moments on first step
         if self.m is None:
             self.m = torch.zeros_like(grad)
             self.v = torch.zeros_like(grad)
-        
-        # Increment timestep
-        self.t += 1
         
         # Update biased first moment estimate
         self.m = self.beta1 * self.m + (1 - self.beta1) * grad
@@ -89,20 +70,20 @@ class RiemannianAdam:
         # Update biased second raw moment estimate
         self.v = self.beta2 * self.v + (1 - self.beta2) * (grad ** 2)
         
-        # Compute bias-corrected first moment
+        # Compute bias-corrected moment estimates
         m_hat = self.m / (1 - self.beta1 ** self.t)
-        
-        # Compute bias-corrected second raw moment
         v_hat = self.v / (1 - self.beta2 ** self.t)
         
         # Compute Adam update direction
-        # Note: We use negative gradient for minimization
-        update_direction = -m_hat / (torch.sqrt(v_hat) + self.eps)
+        update = m_hat / (torch.sqrt(v_hat) + self.eps)
         
-        # Apply Cayley retraction to move on manifold
-        basis_new = cayley_retraction(basis, update_direction, self.lr)
+        # Move in the direction (note: gradient descent, so negative)
+        new_basis = basis - self.lr * update
         
-        return basis_new
+        # Project back to manifold
+        new_basis = project_to_grassmannian(new_basis)
+        
+        return new_basis
     
     def set_lr(self, lr: float):
         """Update learning rate"""
@@ -113,70 +94,76 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
     """
     Construct optimal 2D steering plane via Grassmannian optimization
     
-    Uses Adam optimizer for better convergence compared to SGD.
+    Optimizes: max_{S ∈ G(2,d)} α·Separability(S) + β·Focus(S)
+    
+    where:
+    - Separability = distance between harmful/harmless cluster centers in 2D projection
+    - Focus = alignment of subspace with known feature direction
     """
     
     def __init__(
         self,
-        feature_direction: Optional[torch.Tensor] = None,
         alpha: float = 1.0,
-        beta: float = 0.1,
-        lr: float = 0.01,  # Lower for Adam
-        betas: Tuple[float, float] = (0.9, 0.999),
+        beta: float = 0.5,
+        lr: float = 0.1,
         max_iterations: int = 100,
-        convergence_threshold: float = 1e-5,
+        convergence_threshold: float = 1e-4,
         use_geoopt: bool = True,
-        verbose: bool = True,
         use_lr_schedule: bool = True,
         gradient_clip: float = 1.0,
-        patience: int = 10
+        betas: Tuple[float, float] = (0.9, 0.999),
+        early_stopping_patience: int = 15,
+        normalize_activations: bool = False,
+        scaling_method: str = 'baseline',  # NEW: separability scaling method
+        verbose: bool = True
     ):
         """
-        Initialize Grassmannian optimizer with Adam
-        
         Args:
-            feature_direction: Optional pre-selected feature direction
-            alpha: Weight for separability objective
-            beta: Weight for preservation objective
-            lr: Learning rate (0.01 is good for Adam)
-            betas: Adam momentum parameters (beta1, beta2)
+            alpha: Separability weight (higher = prioritize separation)
+            beta: Focus weight (higher = prioritize feature alignment)
+            lr: Initial learning rate
             max_iterations: Maximum optimization iterations
-            convergence_threshold: Stop if distance < threshold
-            use_geoopt: Use geoopt library (True) or manual Adam (False)
-            verbose: Print optimization progress
+            convergence_threshold: Stop if distance between iterates < this
+            use_geoopt: Use geoopt library (if False, use manual implementation)
             use_lr_schedule: Use cosine annealing learning rate schedule
-            gradient_clip: Maximum gradient norm
-            patience: Early stopping patience
+            gradient_clip: Clip gradients to this norm (0 = no clipping)
+            betas: Adam optimizer betas
+            early_stopping_patience: Stop if no improvement for this many iterations
+            normalize_activations: Whether to normalize activations (default: False)
+            scaling_method: How to scale separability ('baseline', 'magnitude', 'none')
+            verbose: Print optimization progress
         """
-        self.feature_direction = feature_direction
         self.alpha = alpha
         self.beta = beta
         self.lr = lr
-        self.betas = betas
         self.max_iterations = max_iterations
         self.convergence_threshold = convergence_threshold
         self.use_geoopt = use_geoopt
-        self.verbose = verbose
         self.use_lr_schedule = use_lr_schedule
         self.gradient_clip = gradient_clip
-        self.patience = patience
+        self.betas = betas
+        self.early_stopping_patience = early_stopping_patience
+        self.normalize_activations = normalize_activations
+        self.scaling_method = scaling_method  # NEW: Store scaling method
+        self.verbose = verbose
         
-        # State
-        self.b1 = None
-        self.b2 = None
-        self.projection_matrix = None
-        self.original_dtype = None
+        self.logger = setup_logger(__name__)
         
         # Optimization history
         self.optimization_history = {
-            'distances': [],
             'objectives': [],
             'separability': [],
-            'preservation': [],
+            'focus': [],
+            'distances': [],
             'learning_rates': []
         }
         
-        self.logger = setup_logger(obj=self)
+        # Results
+        self.b1 = None
+        self.b2 = None
+        self.projection_matrix = None
+        self.feature_direction = None
+        self.original_dtype = None
     
     def construct_plane(
         self,
@@ -185,34 +172,35 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
         harmful_activations: Dict[str, torch.Tensor],
         harmless_activations: Dict[str, torch.Tensor],
     ) -> None:
-        """Construct optimal plane via Grassmannian optimization with Adam"""
+        """Construct optimal plane via Grassmannian optimization"""
         # Store original dtype
         self.original_dtype = feature_direction.dtype
         self.feature_direction = feature_direction
         
         if self.verbose:
             self.logger.info("="*60)
-            self.logger.info("Grassmannian Plane Optimization (Adam)")
+            self.logger.info("Grassmannian Plane Optimization")
             self.logger.info("="*60)
             self.logger.info(f"Optimizer: {'Geoopt RiemannianAdam' if self.use_geoopt else 'Manual Riemannian Adam'}")
             self.logger.info(f"Separability weight (α): {self.alpha}")
-            self.logger.info(f"Preservation weight (β): {self.beta}")
+            self.logger.info(f"Focus weight (β): {self.beta}")
             self.logger.info(f"Initial learning rate: {self.lr}")
             self.logger.info(f"Adam betas: {self.betas}")
-            self.logger.info(f"LR scheduling: {'Enabled' if self.use_lr_schedule else 'Disabled'}")
-            self.logger.info(f"Gradient clipping: {self.gradient_clip}")
+            self.logger.info(f"Normalize activations: {self.normalize_activations}")
             self.logger.info(f"Max iterations: {self.max_iterations}")
         
         # Step 1: Initialize from PCA
         initial_basis = self._initialize_from_pca(feature_direction, candidates)
         
-        # Step 2: Create objective function
+        # Step 2: Create objective function (FIXED: now passes feature_direction)
         objective = CombinedObjective(
             harmful_activations,
             harmless_activations,
+            feature_direction,  # CRITICAL: Pass feature direction for FocusObjective
             alpha=self.alpha,
             beta=self.beta,
-            preservation_weight='uniform'
+            normalize_activations=self.normalize_activations,
+            verbose=self.verbose
         )
         
         # Step 3: Optimize with Adam
@@ -232,12 +220,12 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
         )
         
         if self.verbose:
-            sep, pres = objective.get_components(optimized_basis)
+            sep, foc = objective.get_components(optimized_basis)
             self.logger.info("="*60)
             self.logger.info("✓ Optimization Complete")
             self.logger.info(f"Final Separability: {sep:.4f}")
-            self.logger.info(f"Final Preservation Cost: {pres:.4f}")
-            self.logger.info(f"Combined Objective: {self.alpha * sep - self.beta * pres:.4f}")
+            self.logger.info(f"Final Focus: {foc:.4f}")
+            self.logger.info(f"Combined Objective: {self.alpha * sep + self.beta * foc:.4f}")
             self.logger.info("="*60)
     
     def _initialize_from_pca(
@@ -289,136 +277,105 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
         initial_basis: torch.Tensor,
         objective: CombinedObjective
     ) -> torch.Tensor:
-        """Optimize using geoopt library with RiemannianAdam"""
+        """Optimize using geoopt library"""
         if self.verbose:
-            self.logger.info("[2/3] Optimizing with geoopt RiemannianAdam...")
+            self.logger.info("[2/3] Optimizing with Geoopt...")
         
         try:
             import geoopt
-            
-            # Store original dtype
-            original_dtype = initial_basis.dtype
-            
-            # CRITICAL: Convert to float32 if BFloat16
-            # Geoopt's internal operations (retr_transp) also use torch.linalg.solve
-            # which doesn't support BFloat16
-            if initial_basis.dtype == torch.bfloat16:
-                if self.verbose:
-                    self.logger.info("  Converting BFloat16 → Float32 for geoopt compatibility")
-                initial_basis = initial_basis.float()
-            
-            # Use Stiefel manifold (not Grassmann - it doesn't exist in geoopt)
-            # Stiefel: X^T X = I (orthonormal columns)
-            manifold = geoopt.manifolds.Stiefel()
-            
-            # Create parameter on manifold
-            basis_param = geoopt.ManifoldParameter(
-                initial_basis.clone().detach(),
-                manifold=manifold
-            )
-            
-            # Use RiemannianAdam optimizer
-            optimizer = geoopt.optim.RiemannianAdam(
-                [basis_param],
-                lr=self.lr,
-                betas=self.betas
-            )
-            
-            # Optimization loop
-            prev_basis = initial_basis.clone()
-            best_loss = float('inf')
-            patience_counter = 0
-            
-            for iteration in range(self.max_iterations):
-                # Update learning rate if using schedule
-                if self.use_lr_schedule:
-                    current_lr = self._get_learning_rate(iteration)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = current_lr
-                else:
-                    current_lr = self.lr
-                
-                optimizer.zero_grad()
-                
-                # Compute objective
-                # Note: objective may have BFloat16 activations stored, but basis_param 
-                # is Float32. PyTorch handles this automatically in matrix multiplications.
-                loss = objective(basis_param)
-                
-                # Backward pass
-                loss.backward()
-                
-                # Gradient clipping
-                if self.gradient_clip > 0:
-                    torch.nn.utils.clip_grad_norm_([basis_param], self.gradient_clip)
-                
-                # Optimization step
-                optimizer.step()
-                
-                # Measure convergence
-                with torch.no_grad():
-                    distance = compute_grassmann_distance(prev_basis, basis_param.data)
-                    
-                    # Log metrics
-                    sep, pres = objective.get_components(basis_param)
-                    
-                    self.optimization_history['distances'].append(distance)
-                    self.optimization_history['objectives'].append(loss.item())
-                    self.optimization_history['separability'].append(sep)
-                    self.optimization_history['preservation'].append(pres)
-                    self.optimization_history['learning_rates'].append(current_lr)
-                    
-                    if self.verbose and (iteration % 10 == 0 or iteration == self.max_iterations - 1):
-                        self.logger.info(
-                            f"  Iter {iteration:3d}: Loss={loss.item():.4f}, "
-                            f"Sep={sep:.4f}, Pres={pres:.4f}, Dist={distance:.6f}, LR={current_lr:.5f}"
-                        )
-                    
-                    # Early stopping
-                    if loss.item() < best_loss - 1e-6:
-                        best_loss = loss.item()
-                        patience_counter = 0
-                    else:
-                        patience_counter += 1
-                    
-                    if patience_counter >= self.patience:
-                        if self.verbose:
-                            self.logger.info(f"  ✓ Early stopping at iteration {iteration}")
-                        break
-                    
-                    # Convergence check
-                    if distance < self.convergence_threshold:
-                        if self.verbose:
-                            self.logger.info(f"  ✓ Converged at iteration {iteration}")
-                        break
-                    
-                    prev_basis = basis_param.data.clone()
-            
-            # Convert back to original dtype if needed
-            result = basis_param.data.detach()
-            if original_dtype == torch.bfloat16:
-                if self.verbose:
-                    self.logger.info("  Converting Float32 → BFloat16")
-                result = result.bfloat16()
-            
-            return result
-            
-        except ImportError as e:
-            self.logger.error(f"Failed to import geoopt: {e}")
-            self.logger.info("Falling back to manual Adam optimization...")
+        except ImportError:
+            self.logger.warning("Geoopt not installed, falling back to manual implementation")
             return self._optimize_manual_adam(initial_basis, objective)
+
+        # Convert float dtype
+        original_dtype = initial_basis.dtype
+        initial_basis = initial_basis.float()
+        
+        # Create parameter on Stiefel manifold
+        manifold = geoopt.manifolds.Stiefel()
+        basis_param = geoopt.ManifoldParameter(initial_basis.clone(), manifold=manifold)
+        
+        # Create Riemannian Adam optimizer
+        optimizer = geoopt.optim.RiemannianAdam([basis_param], lr=self.lr, betas=self.betas)
+        
+        best_loss = float('inf')
+        patience_counter = 0
+        prev_basis = basis_param.data.clone()
+        
+        for iteration in range(self.max_iterations):
+            # Get current learning rate
+            current_lr = self._get_learning_rate(iteration)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = current_lr
+            
+            # Zero gradients
+            optimizer.zero_grad()
+            
+            # Forward pass - geoopt handles dtype conversion automatically
+            loss = objective(basis_param)
+            
+            # Backward pass
+            loss.backward()
+            
+            # Gradient clipping
+            if self.gradient_clip > 0:
+                torch.nn.utils.clip_grad_norm_([basis_param], self.gradient_clip)
+            
+            # Optimization step
+            optimizer.step()
+            
+            # Measure convergence
+            with torch.no_grad():
+                distance = compute_grassmann_distance(prev_basis, basis_param.data)
+                
+                # Log metrics
+                sep, foc = objective.get_components(basis_param)
+                
+                self.optimization_history['distances'].append(distance)
+                self.optimization_history['objectives'].append(-loss.item())  # Negate to show actual objective
+                self.optimization_history['separability'].append(sep)
+                self.optimization_history['focus'].append(foc)
+                self.optimization_history['learning_rates'].append(current_lr)
+                
+                if self.verbose and (iteration % 10 == 0 or iteration == self.max_iterations - 1):
+                    self.logger.info(
+                        f"  Iter {iteration:3d}: Obj={-loss.item():.4f}, "
+                        f"Sep={sep:.4f}, Foc={foc:.4f}, Dist={distance:.6f}, LR={current_lr:.5f}"
+                    )
+                
+                # Early stopping
+                if loss.item() < best_loss - 1e-6:
+                    best_loss = loss.item()
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+                
+                if patience_counter >= self.early_stopping_patience:
+                    if self.verbose:
+                        self.logger.info(f"  ✓ Early stopping at iteration {iteration}")
+                    break
+                
+                # Convergence check
+                if distance < self.convergence_threshold:
+                    if self.verbose:
+                        self.logger.info(f"  ✓ Converged at iteration {iteration}")
+                    break
+                
+                prev_basis = basis_param.data.clone()
+
+        return basis_param.data.detach().to(dtype=original_dtype)
     
     def _optimize_manual_adam(
         self,
         initial_basis: torch.Tensor,
         objective: CombinedObjective
     ) -> torch.Tensor:
-        """Manual optimization using custom Riemannian Adam"""
+        """Optimize using manual Riemannian Adam"""
         if self.verbose:
-            self.logger.info("[2/3] Optimizing with manual Riemannian Adam...")
+            self.logger.info("[2/3] Optimizing with Manual Adam...")
         
-        basis = initial_basis.clone().detach().requires_grad_(True)
-        prev_basis = basis.clone()
+        basis = initial_basis.clone().requires_grad_(True)
+        prev_basis = basis.detach().clone()
         
         # Create Riemannian Adam optimizer
         optimizer = RiemannianAdam(
@@ -459,19 +416,24 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
                 distance = compute_grassmann_distance(prev_basis, basis_new)
                 
                 # Log metrics
-                sep, pres = objective.get_components(basis_new)
+                sep, foc = objective.get_components(basis_new)
                 
                 self.optimization_history['distances'].append(distance)
-                self.optimization_history['objectives'].append(loss.item())
+                self.optimization_history['objectives'].append(-loss.item())
                 self.optimization_history['separability'].append(sep)
-                self.optimization_history['preservation'].append(pres)
+                self.optimization_history['focus'].append(foc)
                 self.optimization_history['learning_rates'].append(current_lr)
                 
                 if self.verbose and (iteration % 10 == 0 or iteration == self.max_iterations - 1):
                     self.logger.info(
-                        f"  Iter {iteration:3d}: Loss={loss.item():.4f}, "
-                        f"Sep={sep:.4f}, Pres={pres:.4f}, Dist={distance:.6f}, LR={current_lr:.5f}"
+                        f"  Iter {iteration:3d}: Obj={-loss.item():.4f}, "
+                        f"Sep={sep:.4f}, Foc={foc:.4f}, Dist={distance:.6f}"
                     )
+                
+                # Update basis
+                basis.copy_(basis_new)
+                basis.grad.zero_()
+                prev_basis = basis_new.clone()
                 
                 # Early stopping
                 if loss.item() < best_loss - 1e-6:
@@ -480,7 +442,7 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
                 else:
                     patience_counter += 1
                 
-                if patience_counter >= self.patience:
+                if patience_counter >= self.early_stopping_patience:
                     if self.verbose:
                         self.logger.info(f"  ✓ Early stopping at iteration {iteration}")
                     break
@@ -490,37 +452,68 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
                     if self.verbose:
                         self.logger.info(f"  ✓ Converged at iteration {iteration}")
                     break
-                
-                # Update for next iteration
-                prev_basis = basis.clone()
-                basis = basis_new.detach().requires_grad_(True)
         
         return basis.detach()
     
     def get_basis(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Get orthonormal basis vectors"""
+        """Get the constructed basis vectors"""
         if self.b1 is None or self.b2 is None:
-            raise RuntimeError("Plane not constructed. Call construct_plane() first.")
+            raise ValueError("Plane not constructed yet. Call construct_plane() first.")
         return self.b1, self.b2
     
     def get_projection_matrix(self) -> torch.Tensor:
-        """Get projection matrix"""
+        """Get the projection matrix onto the plane"""
         if self.projection_matrix is None:
-            raise RuntimeError("Plane not constructed. Call construct_plane() first.")
+            raise ValueError("Plane not constructed yet. Call construct_plane() first.")
         return self.projection_matrix
     
     def get_optimization_history(self) -> Dict[str, List[float]]:
         """Get optimization trajectory for analysis"""
         return self.optimization_history
     
+    def measure_contraction_constant(self) -> Optional[float]:
+        """
+        Estimate empirical contraction constant from optimization history.
+        
+        The contraction constant q measures how much distances shrink between
+        consecutive iterations: d(t+1) / d(t).
+        
+        If q < 1, the optimization has the contraction property and convergence
+        is guaranteed by the Banach fixed-point theorem.
+        
+        Returns:
+            Maximum contraction ratio observed, or None if insufficient data
+        """
+        distances = self.optimization_history['distances']
+        
+        if len(distances) < 3:
+            return None
+        
+        # Compute ratios of consecutive distances
+        ratios = []
+        for i in range(1, len(distances)):
+            if distances[i-1] > 1e-8:  # Avoid division by zero
+                ratio = distances[i] / distances[i-1]
+                ratios.append(ratio)
+        
+        if not ratios:
+            return None
+        
+        # Return maximum ratio (worst-case contraction constant)
+        return max(ratios)
+    
     def project_onto_plane(self, vector: torch.Tensor) -> torch.Tensor:
-        """Project vector onto steering plane"""
+        """Project a vector onto the steering plane"""
         P = self.get_projection_matrix()
         P = P.to(vector.device, dtype=vector.dtype)
         return torch.matmul(vector, P.T)
     
     def decompose_in_basis(self, vector: torch.Tensor) -> Tuple[float, float]:
-        """Decompose vector in terms of basis {b1, b2}"""
+        """
+        Decompose a vector in terms of basis {b1, b2}
+        
+        Returns coefficients (c1, c2) such that proj(vector) ≈ c1*b1 + c2*b2
+        """
         b1, b2 = self.get_basis()
         b1 = b1.to(vector.device, dtype=vector.dtype)
         b2 = b2.to(vector.device, dtype=vector.dtype)
@@ -534,27 +527,13 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
         self,
         candidates: Dict[str, torch.Tensor]
     ) -> Dict[str, Tuple[float, float]]:
-        """Project all candidate directions onto the steering plane"""
+        """
+        Project all candidate directions onto the steering plane
+        
+        Returns dictionary mapping layer names to (b1_coeff, b2_coeff) tuples
+        """
         projections = {}
         for layer_name, direction in candidates.items():
             coeff_b1, coeff_b2 = self.decompose_in_basis(direction)
             projections[layer_name] = (coeff_b1, coeff_b2)
         return projections
-    
-    def measure_contraction_constant(self) -> Optional[float]:
-        """Estimate empirical contraction constant from optimization history"""
-        distances = self.optimization_history['distances']
-        
-        if len(distances) < 3:
-            return None
-        
-        ratios = []
-        for i in range(1, len(distances)):
-            if distances[i-1] > 1e-8:
-                ratio = distances[i] / distances[i-1]
-                ratios.append(ratio)
-        
-        if not ratios:
-            return None
-        
-        return max(ratios)

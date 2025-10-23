@@ -177,7 +177,7 @@ class AngularSteeringPipeline:
             grassmann_config = self.config.get('grassmannian', {})
             
             self.plane_constructor = GrassmannianPlaneConstructor(
-                self.feature_direction,
+                # self.feature_direction,
                 alpha=grassmann_config.get('alpha', 1.0),
                 beta=grassmann_config.get('beta', 0.1),
                 lr=grassmann_config.get('lr', 0.1),
@@ -216,8 +216,8 @@ class AngularSteeringPipeline:
             self.plane_constructor.construct_plane(
                 self.feature_direction,
                 candidates,
-                harmful_acts,  # Pass for compatibility
-                harmless_acts
+                # harmful_acts,  # Pass for compatibility
+                # harmless_acts
             )
             self.logger.info("  ✓ Constructed 2D steering plane with PCA")
         

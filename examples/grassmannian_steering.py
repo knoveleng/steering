@@ -31,10 +31,10 @@ def plot_optimization_history(history, save_path="analysis/optimization_history.
     ax.set_title('Optimization Objective')
     ax.grid(True, alpha=0.3)
     
-    # Plot 2: Separability and Preservation
+    # Plot 2: Separability and Focus
     ax = axes[0, 1]
     ax.plot(history['separability'], 'g-', label='Separability', linewidth=2)
-    ax.plot(history['preservation'], 'r-', label='Preservation Cost', linewidth=2)
+    ax.plot(history['focus'], 'r-', label='Focus/Alignment Cost', linewidth=2)
     ax.set_xlabel('Iteration')
     ax.set_ylabel('Value')
     ax.set_title('Objective Components')
@@ -186,10 +186,10 @@ def main():
         
         # Get final separability from both methods
         grass_sep = history['separability'][-1]
-        grass_pres = history['preservation'][-1]
+        grass_pres = history['focus'][-1]
         
         logger.info(f"Grassmannian - Separability: {grass_sep:.4f}")
-        logger.info(f"Grassmannian - Preservation: {grass_pres:.4f}")
+        logger.info(f"Grassmannian - Focus/Alignment: {grass_pres:.4f}")
         logger.info("PCA baseline - Heuristic (no optimization objective)")
         
         improvement = ((grass_sep - grass_pres) / grass_pres * 100 
