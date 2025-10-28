@@ -72,7 +72,9 @@ class FeatureDirectionCalculator(BaseFeatureDirectionCalculator):
     
     def select_best_direction(
         self,
-        candidates: Dict[str, torch.Tensor]
+        candidates: Dict[str, torch.Tensor],
+        positive_activations: Optional[Dict[str, torch.Tensor]] = None,
+        negative_activations: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, str]:
         """
         Select direction with highest average cosine similarity
