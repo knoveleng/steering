@@ -20,11 +20,9 @@ class ArtifactsManager:
         self.base_dir = Path(output_dir)
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.session_dir = self.base_dir / f"calibration_{name}_{self.session_id}"
-        self.session_dir.mkdir(parents=True, exist_ok=True)
 
         # Setup logger
         self.logger = setup_logger(obj=self)
-        self.logger.info(f"Artifacts session created at: {self.session_dir}")
     
     def _save_activations(
         self,
@@ -133,6 +131,9 @@ class ArtifactsManager:
         Returns:
             Path to the session directory containing all artifacts
         """
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+        self.logger.info(f"Artifacts session created at: {self.session_dir}")
+        
         self.logger.info("[Saving Calibration Artifacts]")
 
         # Save individual components using private methods
