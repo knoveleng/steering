@@ -618,6 +618,306 @@ class ActivationAnalyzer:
         
         self.stats['similarity_matrix'] = stats
         return stats
+
+    def plot_activations_on_steering_plane(
+        self,
+        positive_activations: Dict[str, torch.Tensor],
+        negative_activations: Dict[str, torch.Tensor],
+        basis: Tuple[torch.Tensor, torch.Tensor],
+        save_name: Optional[str] = None
+    ) -> Dict:
+        """
+        Plot mean activations from all layers projected onto the steering plane
+        
+        Creates a 2D scatter plot showing how the mean activation of each layer
+        projects onto the steering plane defined by basis vectors (b1, b2).
+        Each point represents one layer's mean activation.
+        
+        Args:
+            positive_activations: Dict[layer, Tensor(n_samples, hidden_dim)]
+            negative_activations: Dict[layer, Tensor(n_samples, hidden_dim)]
+            basis: Tuple of (b1, b2) basis vectors defining the steering plane
+            save_name: Optional name for saving the plot
+            
+        Returns:
+            Dict containing projection statistics
+        """
+        layer_names = list(positive_activations.keys())
+        
+        # Unpack basis vectors
+        b1, b2 = basis
+        b1 = b1.float()
+        b2 = b2.float()
+        
+        # Compute mean activation for each layer
+        pos_means_b1 = []
+        pos_means_b2 = []
+        neg_means_b1 = []
+        neg_means_b2 = []
+        valid_layers = []
+        
+        for layer_name in layer_names:
+            if layer_name not in positive_activations or layer_name not in negative_activations:
+                continue
+            
+            # Compute mean activation for this layer
+            pos_mean = positive_activations[layer_name].float().mean(dim=0)  # Shape: (hidden_dim,)
+            neg_mean = negative_activations[layer_name].float().mean(dim=0)  # Shape: (hidden_dim,)
+            
+            # Project mean activations onto basis
+            pos_proj_b1 = torch.dot(pos_mean, b1).item()
+            pos_proj_b2 = torch.dot(pos_mean, b2).item()
+            neg_proj_b1 = torch.dot(neg_mean, b1).item()
+            neg_proj_b2 = torch.dot(neg_mean, b2).item()
+            
+            pos_means_b1.append(pos_proj_b1)
+            pos_means_b2.append(pos_proj_b2)
+            neg_means_b1.append(neg_proj_b1)
+            neg_means_b2.append(neg_proj_b2)
+            valid_layers.append(layer_name)
+        
+        if len(valid_layers) == 0:
+            raise ValueError("No valid layers found with both positive and negative activations")
+        
+        # Convert to numpy arrays - these should be arrays, not single floats
+        pos_x = np.array(pos_means_b1, dtype=np.float32)
+        pos_y = np.array(pos_means_b2, dtype=np.float32)
+        neg_x = np.array(neg_means_b1, dtype=np.float32)
+        neg_y = np.array(neg_means_b2, dtype=np.float32)
+        
+        # Debug: verify these are arrays
+        assert pos_x.ndim == 1, f"pos_x should be 1D array, got shape {pos_x.shape}"
+        assert pos_y.ndim == 1, f"pos_y should be 1D array, got shape {pos_y.shape}"
+        assert neg_x.ndim == 1, f"neg_x should be 1D array, got shape {neg_x.shape}"
+        assert neg_y.ndim == 1, f"neg_y should be 1D array, got shape {neg_y.shape}"
+        
+        # Create color scale for layers (like in plot_plane_evolution)
+        n_layers = len(valid_layers)
+        colors_pos = list(range(n_layers))
+        colors_neg = list(range(n_layers))
+        
+        # Create Plotly scatter plot
+        fig = go.Figure()
+        
+        # Add trajectory lines for positive activations
+        for i in range(n_layers - 1):
+            fig.add_trace(go.Scatter(
+                x=[float(pos_x[i]), float(pos_x[i+1])],
+                y=[float(pos_y[i]), float(pos_y[i+1])],
+                mode='lines',
+                line=dict(color='rgba(255, 0, 0, 0.3)', width=2),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+        
+        # Add trajectory lines for negative activations
+        for i in range(n_layers - 1):
+            fig.add_trace(go.Scatter(
+                x=[float(neg_x[i]), float(neg_x[i+1])],
+                y=[float(neg_y[i]), float(neg_y[i+1])],
+                mode='lines',
+                line=dict(color='rgba(0, 0, 255, 0.3)', width=2),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+        
+        # Add positive mean activations with gradient coloring
+        fig.add_trace(go.Scatter(
+            x=pos_x.tolist(),  # Convert to list explicitly
+            y=pos_y.tolist(),
+            mode='markers',
+            name='Positive Means',
+            marker=dict(
+                size=10,
+                color=colors_pos,
+                colorscale='Reds',
+                opacity=0.8,
+                line=dict(width=1, color='darkred'),
+                colorbar=dict(title="Layer", x=1.15, len=0.4, y=0.75)
+            ),
+            text=[f'Layer {i}' for i in range(n_layers)],
+            hovertemplate='Positive - %{text}<br>b₁: %{x:.3f}<br>b₂: %{y:.3f}<extra></extra>'
+        ))
+        
+        # Add negative mean activations with gradient coloring
+        fig.add_trace(go.Scatter(
+            x=neg_x.tolist(),  # Convert to list explicitly
+            y=neg_y.tolist(),
+            mode='markers',
+            name='Negative Means',
+            marker=dict(
+                size=10,
+                color=colors_neg,
+                colorscale='Blues',
+                opacity=0.8,
+                line=dict(width=1, color='darkblue'),
+                colorbar=dict(title="Layer", x=1.0, len=0.4, y=0.25)
+            ),
+            text=[f'Layer {i}' for i in range(n_layers)],
+            hovertemplate='Negative - %{text}<br>b₁: %{x:.3f}<br>b₂: %{y:.3f}<extra></extra>'
+        ))
+        
+        # Add overall centroids (mean of all layer means)
+        pos_centroid_x = float(pos_x.mean())
+        pos_centroid_y = float(pos_y.mean())
+        neg_centroid_x = float(neg_x.mean())
+        neg_centroid_y = float(neg_y.mean())
+        
+        fig.add_trace(go.Scatter(
+            x=[pos_centroid_x],
+            y=[pos_centroid_y],
+            mode='markers',
+            name='Positive Centroid',
+            marker=dict(
+                size=18,
+                color='red',
+                symbol='x',
+                line=dict(width=3, color='darkred')
+            ),
+            hovertemplate='Pos Centroid<br>b₁: %{x:.3f}<br>b₂: %{y:.3f}<extra></extra>'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=[neg_centroid_x],
+            y=[neg_centroid_y],
+            mode='markers',
+            name='Negative Centroid',
+            marker=dict(
+                size=18,
+                color='blue',
+                symbol='x',
+                line=dict(width=3, color='darkblue')
+            ),
+            hovertemplate='Neg Centroid<br>b₁: %{x:.3f}<br>b₂: %{y:.3f}<extra></extra>'
+        ))
+        
+        # Add line connecting centroids
+        fig.add_trace(go.Scatter(
+            x=[neg_centroid_x, pos_centroid_x],
+            y=[neg_centroid_y, pos_centroid_y],
+            mode='lines',
+            name='Separation Vector',
+            line=dict(color='black', width=2, dash='dash'),
+            hoverinfo='skip',
+            showlegend=True
+        ))
+        
+        # Add basis vectors as arrows
+        # Calculate scale based on data range
+        all_x = np.concatenate([pos_x, neg_x])
+        all_y = np.concatenate([pos_y, neg_y])
+        x_range = float(max(abs(all_x.min()), abs(all_x.max()))) if len(all_x) > 0 else 1.0
+        y_range = float(max(abs(all_y.min()), abs(all_y.max()))) if len(all_y) > 0 else 1.0
+        arrow_scale = float(min(x_range, y_range) * 0.3)
+        
+        # Make sure arrow_scale is reasonable
+        if arrow_scale < 0.01:
+            arrow_scale = 0.5
+        
+        fig.add_trace(go.Scatter(
+            x=[0.0, arrow_scale],
+            y=[0.0, 0.0],
+            mode='lines+text',
+            line=dict(color='blue', width=3),
+            text=['', 'b₁'],
+            textposition='middle right',
+            textfont=dict(color='blue', size=14),
+            showlegend=False,
+            name='Basis b₁',
+            hoverinfo='skip'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=[0.0, 0.0],
+            y=[0.0, arrow_scale],
+            mode='lines+text',
+            line=dict(color='green', width=3),
+            text=['', 'b₂'],
+            textposition='top center',
+            textfont=dict(color='green', size=14),
+            showlegend=False,
+            name='Basis b₂',
+            hoverinfo='skip'
+        ))
+        
+        # Add axes through origin
+        fig.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.3, annotation_text="")
+        fig.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3, annotation_text="")
+        
+        # Update layout
+        fig.update_layout(
+            title=dict(
+                text='Mean Activations on Steering Plane (All Layers)',
+                font=dict(size=16)
+            ),
+            xaxis=dict(
+                title='Basis Vector b₁',
+                showgrid=True,
+                gridcolor='lightgray',
+                zeroline=True,
+                zerolinewidth=1,
+                zerolinecolor='gray'
+            ),
+            yaxis=dict(
+                title='Basis Vector b₂',
+                showgrid=True,
+                gridcolor='lightgray',
+                zeroline=True,
+                zerolinewidth=1,
+                zerolinecolor='gray'
+            ),
+            showlegend=True,
+            width=1000,
+            height=800,
+            template='plotly_white',
+            hovermode='closest'
+        )
+        
+        # Make axes equal for better visualization
+        fig.update_yaxes(scaleanchor="x", scaleratio=1)
+        
+        if save_name:
+            fig.write_image(self.output_dir / f'steering_plane_{save_name}.png', format='png')
+            
+            if hasattr(self, 'logger'):
+                self.logger.info(f"  ✓ steering_plane_{save_name}.png")
+        
+        # Compute statistics
+        separation_distance = np.sqrt((pos_centroid_x - neg_centroid_x)**2 + 
+                                    (pos_centroid_y - neg_centroid_y)**2)
+        
+        # Compute variance along each basis axis (variance of layer means)
+        pos_var_b1 = float(pos_x.var())
+        pos_var_b2 = float(pos_y.var())
+        neg_var_b1 = float(neg_x.var())
+        neg_var_b2 = float(neg_y.var())
+        
+        # Compute trajectory lengths (how much the means move across layers)
+        pos_trajectory_length = float(np.sum(np.sqrt(np.diff(pos_x)**2 + np.diff(pos_y)**2)))
+        neg_trajectory_length = float(np.sum(np.sqrt(np.diff(neg_x)**2 + np.diff(neg_y)**2)))
+        
+        stats = {
+            'n_layers': n_layers,
+            'layer_names': valid_layers,
+            'positive_centroid': [pos_centroid_x, pos_centroid_y],
+            'negative_centroid': [neg_centroid_x, neg_centroid_y],
+            'separation_distance': float(separation_distance),
+            'positive_variance_b1': pos_var_b1,
+            'positive_variance_b2': pos_var_b2,
+            'negative_variance_b1': neg_var_b1,
+            'negative_variance_b2': neg_var_b2,
+            'positive_trajectory_length': pos_trajectory_length,
+            'negative_trajectory_length': neg_trajectory_length,
+            'positive_projections_b1': pos_x.tolist(),
+            'positive_projections_b2': pos_y.tolist(),
+            'negative_projections_b1': neg_x.tolist(),
+            'negative_projections_b2': neg_y.tolist(),
+        }
+        
+        if hasattr(self, 'stats'):
+            self.stats['steering_plane'] = stats
+        
+        return stats
     
     def analyze_all(
         self,
@@ -649,6 +949,9 @@ class ActivationAnalyzer:
 
         self.logger.info("[6/6] Similarity matrix...")
         self.plot_similarity_matrix(candidates, save_name)
+
+        self.logger.info("[7/6] Activation on steering plane...")
+        self.plot_activations_on_steering_plane(harmful_acts, harmless_acts, basis, save_name)
 
         self.save_statistics(save_name)
 
