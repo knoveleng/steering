@@ -5,6 +5,7 @@ Complete Angular Steering Pipeline
 import torch
 from typing import Dict, List, Optional, Any, Tuple, Literal, Union
 from pathlib import Path
+from tqdm import tqdm
 import logging
 import math
 
@@ -441,7 +442,16 @@ class AngularSteeringPipeline:
         self.model.eval()
 
         with torch.no_grad():
-            for prompt in prompts:
+            # Create progress bar
+            pbar = tqdm(
+                prompts, 
+                desc=f"Generating (θ={theta}°)",
+                unit="prompt",
+                ncols=100,
+                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
+            )
+            
+            for prompt in pbar:
                 # Tokenize prompt
                 inputs = self.tokenizer(
                     prompt,
@@ -468,6 +478,9 @@ class AngularSteeringPipeline:
                 result = {'prompt': prompt, 'response': output_text}
 
                 if calculate_perplexity:
+                    # Update progress bar for perplexity calculation
+                    pbar.set_postfix_str("calculating perplexity")
+                    
                     # Remove hooks for perplexity calculation (optional but recommended)
                     self.hook_manager.remove_hooks()
                     
@@ -487,12 +500,18 @@ class AngularSteeringPipeline:
                     perplexity = torch.exp(loss).item()
                     result['perplexity'] = perplexity
                     
+                    # Update progress bar with perplexity info
+                    pbar.set_postfix_str(f"ppl={perplexity:.2f}")
+                    
                     # Re-register hooks if more prompts to process
                     if prompt != prompts[-1]:
                         self.hook_manager.register_hooks(
                             target_layers,
                             steering_params={'theta': theta}
                         )
+                else:
+                    # Clear postfix if not calculating perplexity
+                    pbar.set_postfix_str("")
 
                 outputs.append(result)
 
