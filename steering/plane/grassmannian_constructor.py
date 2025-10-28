@@ -188,6 +188,15 @@ class GrassmannianPlaneConstructor(BasePlaneConstructor):
             self.logger.info(f"Adam betas: {self.betas}")
             self.logger.info(f"Normalize activations: {self.normalize_activations}")
             self.logger.info(f"Max iterations: {self.max_iterations}")
+
+        # Add seed to ensure reproducibility
+        import random
+        seed = 42
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
         
         # Step 1: Initialize from PCA
         initial_basis = self._initialize_from_pca(feature_direction, candidates)
