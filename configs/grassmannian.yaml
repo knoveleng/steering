@@ -77,15 +77,6 @@ layers:
   extraction_layers: null
   target_layers: null
 
-# Evaluation
-evaluation:
-  theta_range:
-    start: 0
-    end: 360
-    step: 10
-  metrics:
-    - "refusal_score"
-
 artifacts_dir: "artifacts"
 analysis_dir: "analysis"
 save_artifacts: true

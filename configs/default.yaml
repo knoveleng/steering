@@ -48,14 +48,6 @@ layers:
   extraction_layers: null  # Will auto-detect normalization layers
   target_layers: null  # Will use same as extraction
 
-# Evaluation
-evaluation:
-  theta_range:
-    start: 0
-    end: 360
-    step: 10
-  metrics:
-    - "refusal_score"
 
 artifacts_dir: "artifacts"
 analysis_dir: "analysis"
