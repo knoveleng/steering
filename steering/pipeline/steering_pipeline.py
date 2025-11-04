@@ -13,7 +13,7 @@ from ..data import DataManager
 from ..extraction import ActivationExtractor
 from ..direction import FeatureDirectionCalculator
 from ..plane import SteeringPlaneConstructor
-from ..steering import AngularSteeringOperator, AdaptiveSteeringOperator
+from ..steering import AngularSteeringOperator, AdaptiveSteeringOperator, SelectiveSteeringOperator
 from ..hooks import ModelHookManager
 from ..artifacts import ArtifactsManager, ActivationAnalyzer
 from ..utils.logger import setup_logger
@@ -53,6 +53,16 @@ class AngularSteeringPipeline:
         self.use_chat_template = chat_config.get('enabled', False)
         self.system_prompt = chat_config.get('system_prompt', None)
         self.add_generation_prompt = chat_config.get('add_generation_prompt', True)
+
+        # Ensure tokenizer has pad token
+        if self.tokenizer.pad_token is None:
+            self.logger.info("[Warning] Tokenizer has no pad_token. Using eos_token as pad_token.")
+            # If eos_token is also missing, add a default pad token
+            if self.tokenizer.eos_token is None:
+                self.logger.info("[Warning] Tokenizer also has no eos_token. Adding '[PAD]' as pad token.")
+                self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            else:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
         
         # Initialize components
         self.data_manager = DataManager(
@@ -238,13 +248,42 @@ class AngularSteeringPipeline:
 
         # Step 6: Initialize steering components
         self.logger.info("[6/6] Initializing steering operator...")
-        mode = self.config.get('steering_mode', 'adaptive')
+        mode = self.config.get('steering', {}).get('mode', 'standard')
 
         if mode == 'adaptive':
             self.steering_operator = AdaptiveSteeringOperator(
                 b1, b2,
                 cache_rotations=True
             )
+        elif mode == 'selective':
+            # Get selective steering configuration
+            steering_config = self.config.get('steering', {})
+
+            # Create SelectiveSteeringOperator using activations
+            self.logger.info(f"  Computing layer selection using '{mode}' method...")
+            self.steering_operator = SelectiveSteeringOperator.from_activations(
+                positive_activations=harmful_acts,
+                negative_activations=harmless_acts,
+                feature_direction=self.feature_direction,
+                b1=b1,
+                b2=b2,
+                cache_rotations=True,
+            )
+
+            # Get selection info
+            selected_layers = self.steering_operator.get_selected_layers()
+            n_selected = len(selected_layers)
+            n_total = len(harmful_acts)
+
+            self.logger.info(f"  ✓ Selected {n_selected}/{n_total} layers for steering")
+
+            # Compute and store projection stats for visualization
+            self._projection_stats = SelectiveSteeringOperator.compute_layer_projection_stats(
+                harmful_acts,
+                harmless_acts,
+                self.feature_direction
+            )
+            self._layer_steering_mask = self.steering_operator.layer_steering_mask
         else:
             self.steering_operator = AngularSteeringOperator(
                 b1, b2,
@@ -629,7 +668,7 @@ class AngularSteeringPipeline:
                 harmful_acts, harmless_acts, candidates,
                 self.feature_direction, self.best_layer,
                 (b1, b2), projections, self.config,
-                self.config.get('steering_mode', 'adaptive')
+                self.config.get('steering', {}).get('mode', 'standard')
             )
 
         if run_analysis:
@@ -648,6 +687,22 @@ class AngularSteeringPipeline:
                 harmful_acts, harmless_acts, candidates,
                 self.feature_direction, (b1, b2), model_name
             )
+
+            # Add selective steering visualization if in selective mode
+            mode = self.config.get('steering', {}).get('mode', 'standard')
+            if mode == 'selective':
+                projection_stats = getattr(self, '_projection_stats', None)
+                layer_mask = getattr(self, '_layer_steering_mask', None)
+
+                if projection_stats is not None and layer_mask is not None:
+                    self.logger.info("[Selective Steering Analysis]")
+                    selection_method = getattr(self, '_selection_method', 'opposite_signs')
+                    self.analyzer.plot_selective_layer_steering(
+                        projection_stats=projection_stats,
+                        layer_steering_mask=layer_mask,
+                        save_name=model_name,
+                        selection_method=selection_method
+                    )
 
         return session_path or "No artifacts saved"
 
@@ -674,7 +729,7 @@ class AngularSteeringPipeline:
         b1, b2 = bundle['plane']['basis']
 
         # Initialize components
-        mode = self.config.get('steering_mode', 'adaptive')
+        mode = self.config.get('steering', {}).get('mode', 'standard')
 
         if mode == 'adaptive':
             self.steering_operator = AdaptiveSteeringOperator(b1, b2)

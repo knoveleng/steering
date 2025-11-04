@@ -5,6 +5,7 @@ from .operator import (
     AngularSteeringOperator,
     AdaptiveSteeringOperator,
     HouseholderSteeringOperator,
+    SelectiveSteeringOperator,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "AngularSteeringOperator",
     "AdaptiveSteeringOperator",
     "HouseholderSteeringOperator",
+    "SelectiveSteeringOperator",
 ]

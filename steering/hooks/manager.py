@@ -56,16 +56,21 @@ class ModelHookManager(BaseHookManager):
         for name, module in self.model.named_modules():
             if name in layer_names:
                 hook = module.register_forward_hook(
-                    self._create_steering_hook()
+                    self._create_steering_hook(name)
                 )
                 self.hooks.append((name, hook))
-    
-    def _create_steering_hook(self) -> Callable:
-        """Create a forward hook that applies steering"""
+
+    def _create_steering_hook(self, layer_name: str) -> Callable:
+        """
+        Create a forward hook that applies steering
+
+        Args:
+            layer_name: Name of the layer this hook is attached to
+        """
         def hook(module, input, output):
             if not self.steering_enabled:
                 return output
-            
+
             # Handle tuple outputs (some models return (hidden_state, ...))
             if isinstance(output, tuple):
                 hidden_states = output[0]
@@ -73,19 +78,20 @@ class ModelHookManager(BaseHookManager):
             else:
                 hidden_states = output
                 rest = None
-            
-            # Apply steering
+
+            # Apply steering with layer name for selective steering
             steered = self.steering_operator.steer_activation(
                 hidden_states,
-                self.current_theta
+                self.current_theta,
+                layer_name=layer_name
             )
-            
+
             # Return in same format as input
             if rest is not None:
                 return (steered,) + rest
             else:
                 return steered
-        
+
         return hook
     
     def remove_hooks(self) -> None:

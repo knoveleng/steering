@@ -4,7 +4,7 @@ Steering operator implementations
 
 import torch
 import math
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 from .base import BaseSteeringOperator
 
@@ -74,7 +74,8 @@ class AngularSteeringOperator(BaseSteeringOperator):
     def steer_activation(
         self,
         activation: torch.Tensor,
-        theta: float
+        theta: float,
+        layer_name: Optional[str] = None
     ) -> torch.Tensor:
         """
         Apply angular steering
@@ -242,3 +243,324 @@ class HouseholderSteeringOperator(BaseSteeringOperator):
     def reset_cache(self) -> None:
         """No cache for Householder"""
         pass
+
+
+class SelectiveSteeringOperator(AngularSteeringOperator):
+    """
+    Selective angular steering that only steers on layers where
+    positive and negative samples have opposite-signed mean projections
+    along the chosen direction.
+
+    This operator selects layers based on the criterion that the mean scalar
+    projection of positive activations and the mean scalar projection of
+    negative activations along the feature direction have opposite signs.
+    """
+
+    def __init__(
+        self,
+        b1: torch.Tensor,
+        b2: torch.Tensor,
+        layer_steering_mask: Dict[str, bool],
+        cache_rotations: bool = True
+    ):
+        """
+        Initialize selective operator
+
+        Args:
+            b1: First basis vector (feature direction)
+            b2: Second basis vector (orthogonal)
+            layer_steering_mask: Dict mapping layer names to bool (True = steer this layer)
+            cache_rotations: Whether to cache rotations
+        """
+        super().__init__(b1, b2, cache_rotations)
+        self.layer_steering_mask = layer_steering_mask
+        self.current_layer = None
+
+    @classmethod
+    def from_activations(
+        cls,
+        positive_activations: Dict[str, torch.Tensor],
+        negative_activations: Dict[str, torch.Tensor],
+        feature_direction: torch.Tensor,
+        b1: torch.Tensor,
+        b2: torch.Tensor,
+        cache_rotations: bool = True,
+        method: str = 'opposite_signs',
+        best_layer_idx: Optional[int] = None,
+        **method_kwargs
+    ) -> 'SelectiveSteeringOperator':
+        """
+        Create a SelectiveSteeringOperator by analyzing activations.
+
+        Args:
+            positive_activations: Dict[layer_name, Tensor(n_pos_samples, hidden_dim)]
+            negative_activations: Dict[layer_name, Tensor(n_neg_samples, hidden_dim)]
+            feature_direction: Feature direction vector to project onto
+            b1: First basis vector (feature direction)
+            b2: Second basis vector (orthogonal)
+            cache_rotations: Whether to cache rotations
+            method: Selection method - one of:
+                - 'scatter': Scatter selection - all layers with opposite signs (non-contiguous)
+                - 'weighted_quality': Range selection - weighted quality maximization (contiguous)
+                - 'constrained_window': Range selection - constrained window optimization (contiguous)
+                - 'change_point': Range selection - change-point detection (contiguous)
+                - 'robust_plateau': Range selection - robust plateau detection (contiguous)
+            best_layer_idx: Index of best layer (required for range methods)
+            **method_kwargs: Additional arguments for specific methods
+
+        Returns:
+            SelectiveSteeringOperator instance with computed layer mask
+        """
+        # Scatter method: select all layers with opposite-signed projections
+        # This may result in non-contiguous selection
+        layer_steering_mask = cls.compute_layer_steering_mask(
+            positive_activations,
+            negative_activations,
+            feature_direction
+        )
+
+        return cls(b1, b2, layer_steering_mask, cache_rotations)
+
+    @staticmethod
+    def compute_layer_steering_mask(
+        positive_activations: Dict[str, torch.Tensor],
+        negative_activations: Dict[str, torch.Tensor],
+        feature_direction: torch.Tensor,
+        require_all_at_index: bool = True
+    ) -> Dict[str, bool]:
+        """
+        Compute which layers should be steered based on projection sign analysis.
+
+        A layer is selected for steering if:
+        - mean(positive_projections) and mean(negative_projections) have opposite signs
+        - (optional) ALL layer components at the same index are True
+
+        Args:
+            positive_activations: Dict[layer_name, Tensor(n_pos_samples, hidden_dim)]
+            negative_activations: Dict[layer_name, Tensor(n_neg_samples, hidden_dim)]
+            feature_direction: Feature direction vector to project onto
+            require_all_at_index: If True, only keep index if ALL its components are True
+
+        Returns:
+            Dict mapping layer names to bool (True = steer this layer)
+        """
+        layer_steering_mask = {}
+
+        # Normalize feature direction
+        feature_direction_norm = feature_direction / (feature_direction.norm() + 1e-8)
+        feature_direction_norm = feature_direction_norm.float()
+
+        for layer_name in positive_activations.keys():
+            if layer_name not in negative_activations:
+                layer_steering_mask[layer_name] = False
+                continue
+
+            # Get activations for this layer
+            pos_acts = positive_activations[layer_name].float() / (positive_activations[layer_name].norm(dim=-1, keepdim=True) + 1e-8).float()
+            neg_acts = negative_activations[layer_name].float() / (negative_activations[layer_name].norm(dim=-1, keepdim=True) + 1e-8).float()
+
+            # Move feature direction to same device
+            feat_dir = feature_direction_norm.to(pos_acts.device)
+
+            # Compute projections onto feature direction for all samples
+            pos_projections = pos_acts @ feat_dir  # Shape: (n_pos_samples,)
+            neg_projections = neg_acts @ feat_dir  # Shape: (n_neg_samples,)
+
+            # Compute mean projections
+            pos_mean_proj = pos_projections.mean().item()
+            neg_mean_proj = neg_projections.mean().item()
+
+            # Select layer if mean projections have opposite signs
+            opposite_signs = (pos_mean_proj * neg_mean_proj) < 0
+
+            layer_steering_mask[layer_name] = opposite_signs
+
+        # Apply index-based filtering if requested
+        # if require_all_at_index:
+        #     layer_steering_mask = SelectiveSteeringOperator._filter_by_index(layer_steering_mask)
+
+        return layer_steering_mask
+
+    @staticmethod
+    def _filter_by_index(layer_steering_mask: Dict[str, bool]) -> Dict[str, bool]:
+        """
+        Keep layer index True only if ALL entries at that index are True.
+        
+        Extracts numeric index from layer names and groups by it.
+        An index is valid only if all its entries are True.
+        """
+        from collections import defaultdict
+        import re
+        
+        # Group by extracted index
+        index_groups = defaultdict(list)
+        
+        for layer_name, is_true in layer_steering_mask.items():
+            # Extract first number from layer name (the index)
+            match = re.search(r'\.(\d+)\.', layer_name)
+            if match:
+                index = match.group(1)  # e.g., "11", "16", "18"
+                index_groups[index].append((layer_name, is_true))
+        
+        # Find valid indices where ALL entries are True
+        valid_indices = set()
+        for index, entries in index_groups.items():
+            if all(is_true for _, is_true in entries):
+                valid_indices.add(index)
+        
+        # Build filtered mask
+        filtered_mask = {}
+        for layer_name in layer_steering_mask.keys():
+            match = re.search(r'\.(\d+)\.', layer_name)
+            if match:
+                index = match.group(1)
+                filtered_mask[layer_name] = index in valid_indices
+            else:
+                filtered_mask[layer_name] = False
+        
+        return filtered_mask
+    
+
+    @staticmethod
+    def compute_layer_projection_stats(
+        positive_activations: Dict[str, torch.Tensor],
+        negative_activations: Dict[str, torch.Tensor],
+        feature_direction: torch.Tensor
+    ) -> Dict[str, Dict[str, float]]:
+        """
+        Compute projection statistics for each layer.
+
+        Returns detailed statistics about how positive and negative activations
+        project onto the feature direction at each layer.
+
+        Args:
+            positive_activations: Dict[layer_name, Tensor(n_pos_samples, hidden_dim)]
+            negative_activations: Dict[layer_name, Tensor(n_neg_samples, hidden_dim)]
+            feature_direction: Feature direction vector to project onto
+
+        Returns:
+            Dict mapping layer names to statistics dict with keys:
+                - 'pos_mean': Mean positive projection
+                - 'neg_mean': Mean negative projection
+                - 'pos_std': Std of positive projections
+                - 'neg_std': Std of negative projections
+                - 'opposite_signs': Whether means have opposite signs
+                - 'separation': Absolute difference between means
+        """
+        stats = {}
+
+        # Normalize feature direction
+        feature_direction_norm = feature_direction / (feature_direction.norm() + 1e-8)
+        feature_direction_norm = feature_direction_norm.float()
+
+        for layer_name in positive_activations.keys():
+            if layer_name not in negative_activations:
+                continue
+
+            # Get activations for this layer
+            pos_acts = positive_activations[layer_name].float()
+            neg_acts = negative_activations[layer_name].float()
+
+
+            # Move feature direction to same device
+            feat_dir = feature_direction_norm.to(pos_acts.device)
+
+            # Compute projections
+            pos_projections = torch.matmul(pos_acts, feat_dir)
+            neg_projections = torch.matmul(neg_acts, feat_dir)
+
+            # Compute statistics
+            pos_mean = pos_projections.mean().item()
+            neg_mean = neg_projections.mean().item()
+            pos_std = pos_projections.std().item()
+            neg_std = neg_projections.std().item()
+
+            opposite_signs = (pos_mean * neg_mean) < 0
+            separation = abs(pos_mean - neg_mean)
+
+            stats[layer_name] = {
+                'pos_mean': pos_mean,
+                'neg_mean': neg_mean,
+                'pos_std': pos_std,
+                'neg_std': neg_std,
+                'opposite_signs': opposite_signs,
+                'separation': separation
+            }
+
+        return stats
+
+
+    def set_current_layer(self, layer_name: str) -> None:
+        """
+        Set the current layer being processed
+
+        Args:
+            layer_name: Name of the current layer
+        """
+        self.current_layer = layer_name
+
+    def should_steer_layer(self, layer_name: Optional[str] = None) -> bool:
+        """
+        Check if the given layer should be steered
+
+        Args:
+            layer_name: Layer name to check (uses current_layer if None)
+
+        Returns:
+            True if this layer should be steered
+        """
+        layer = layer_name if layer_name is not None else self.current_layer
+        if layer is None:
+            return True  # Default to steering if no layer specified
+        return self.layer_steering_mask.get(layer, False)
+
+    def get_selected_layers(self) -> List[str]:
+        """
+        Get list of layers that are selected for steering
+
+        Returns:
+            List of layer names where steering is enabled
+        """
+        return [layer for layer, should_steer in self.layer_steering_mask.items() if should_steer]
+
+    def get_num_selected_layers(self) -> int:
+        """
+        Get number of layers selected for steering
+
+        Returns:
+            Number of layers where steering is enabled
+        """
+        return sum(self.layer_steering_mask.values())
+
+    def steer_activation(
+        self,
+        activation: torch.Tensor,
+        theta: float,
+        layer_name: Optional[str] = None
+    ) -> torch.Tensor:
+        """
+        Apply selective steering based on layer mask
+
+        Args:
+            activation: Tensor of shape (..., hidden_dim)
+            theta: Target angle in degrees
+            layer_name: Optional layer name (uses current_layer if None)
+
+        Returns:
+            Steered activation if layer should be steered, otherwise original activation
+        """
+        # Check if this layer should be steered
+        if not self.should_steer_layer(layer_name):
+            return activation
+
+        # Apply standard angular steering
+        return super().steer_activation(activation, theta)
+
+    def update_layer_mask(self, layer_steering_mask: Dict[str, bool]) -> None:
+        """
+        Update the layer steering mask
+
+        Args:
+            layer_steering_mask: New dict mapping layer names to bool
+        """
+        self.layer_steering_mask = layer_steering_mask

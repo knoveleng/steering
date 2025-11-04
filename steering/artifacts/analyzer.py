@@ -958,6 +958,212 @@ class ActivationAnalyzer:
         self.logger.info(f"✓ Analysis complete! See {self.output_dir}/")
         return self.stats
     
+    def plot_selective_layer_steering(
+        self,
+        projection_stats: Dict[str, Dict[str, float]],
+        layer_steering_mask: Dict[str, bool],
+        save_name: Optional[str] = None,
+        selection_method: str = 'opposite_signs'
+    ) -> Dict:
+        """
+        Plot layer selection for selective steering.
+
+        Shows which layers are selected for steering. For range-based methods,
+        highlights the contiguous range selection.
+
+        Args:
+            projection_stats: Dict from SelectiveSteeringOperator.compute_layer_projection_stats()
+                Each entry contains 'pos_mean', 'neg_mean', 'pos_std', 'neg_std',
+                'opposite_signs', 'separation'
+            layer_steering_mask: Dict mapping layer names to bool (True = selected for steering)
+            save_name: Optional name for saving the plot
+            selection_method: Selection method used ('opposite_signs', 'weighted_quality', etc.)
+
+        Returns:
+            Dict containing statistics about layer selection
+        """
+        layer_names = list(projection_stats.keys())
+        n_layers = len(layer_names)
+
+        # Extract data
+        pos_means = [projection_stats[l]['pos_mean'] for l in layer_names]
+        neg_means = [projection_stats[l]['neg_mean'] for l in layer_names]
+        pos_stds = [projection_stats[l]['pos_std'] for l in layer_names]
+        neg_stds = [projection_stats[l]['neg_std'] for l in layer_names]
+        selected = [layer_steering_mask[l] for l in layer_names]
+        separations = [projection_stats[l]['separation'] for l in layer_names]
+
+        x = list(range(n_layers))
+
+        # Create figure with subplots
+        fig = make_subplots(
+            rows=2, cols=1,
+            subplot_titles=(
+                'Mean Projections on Feature Direction (Selected Layers Highlighted)',
+                'Projection Separation by Layer'
+            ),
+            vertical_spacing=0.12,
+            row_heights=[0.6, 0.4]
+        )
+
+        # Top plot: Mean projections with variance
+        # Add variance bands for positive
+        fig.add_trace(go.Scatter(
+            x=x + x[::-1],
+            y=[pos_means[i] + pos_stds[i] for i in range(n_layers)] +
+              [pos_means[i] - pos_stds[i] for i in range(n_layers-1, -1, -1)],
+            fill='toself',
+            fillcolor='rgba(255, 0, 0, 0.15)',
+            line=dict(color='rgba(255,255,255,0)'),
+            hoverinfo="skip",
+            showlegend=False,
+            name='Positive Variance'
+        ), row=1, col=1)
+
+        # Add variance bands for negative
+        fig.add_trace(go.Scatter(
+            x=x + x[::-1],
+            y=[neg_means[i] + neg_stds[i] for i in range(n_layers)] +
+              [neg_means[i] - neg_stds[i] for i in range(n_layers-1, -1, -1)],
+            fill='toself',
+            fillcolor='rgba(0, 0, 255, 0.15)',
+            line=dict(color='rgba(255,255,255,0)'),
+            hoverinfo="skip",
+            showlegend=False,
+            name='Negative Variance'
+        ), row=1, col=1)
+
+        # Add mean lines with markers - color based on selection
+        # Positive projections
+        pos_colors = ['red' if sel else 'rgba(255, 0, 0, 0.3)' for sel in selected]
+        for i in range(n_layers):
+            showlegend = i == 0 or (i == 1 and not selected[0])
+            fig.add_trace(go.Scatter(
+                x=[x[i]],
+                y=[pos_means[i]],
+                mode='markers+lines' if i < n_layers - 1 else 'markers',
+                name='Positive (selected)' if selected[i] and showlegend else 'Positive (not selected)',
+                marker=dict(
+                    size=10 if selected[i] else 6,
+                    color=pos_colors[i],
+                    symbol='circle'
+                ),
+                line=dict(color=pos_colors[i], width=2) if i < n_layers - 1 else None,
+                showlegend=showlegend and (selected[i] or i == 1),
+                legendgroup='positive',
+                hovertemplate=f'Layer {i}<br>Pos Mean: %{{y:.3f}}<br>Selected: {selected[i]}<extra></extra>'
+            ), row=1, col=1)
+
+        # Negative projections
+        neg_colors = ['blue' if sel else 'rgba(0, 0, 255, 0.3)' for sel in selected]
+        for i in range(n_layers):
+            showlegend = i == 0 or (i == 1 and not selected[0])
+            fig.add_trace(go.Scatter(
+                x=[x[i]],
+                y=[neg_means[i]],
+                mode='markers+lines' if i < n_layers - 1 else 'markers',
+                name='Negative (selected)' if selected[i] and showlegend else 'Negative (not selected)',
+                marker=dict(
+                    size=10 if selected[i] else 6,
+                    color=neg_colors[i],
+                    symbol='circle'
+                ),
+                line=dict(color=neg_colors[i], width=2) if i < n_layers - 1 else None,
+                showlegend=showlegend and (selected[i] or i == 1),
+                legendgroup='negative',
+                hovertemplate=f'Layer {i}<br>Neg Mean: %{{y:.3f}}<br>Selected: {selected[i]}<extra></extra>'
+            ), row=1, col=1)
+
+        # Add zero reference line
+        fig.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.3, row=1, col=1)
+
+        # Highlight selected layers with vertical spans
+        for i, sel in enumerate(selected):
+            if sel:
+                fig.add_vrect(
+                    x0=i - 0.4, x1=i + 0.4,
+                    fillcolor="rgba(0, 255, 0, 0.1)",
+                    layer="below",
+                    line_width=0,
+                    row=1, col=1
+                )
+
+        # Bottom plot: Separation bars
+        bar_colors = ['green' if sel else 'lightgray' for sel in selected]
+        fig.add_trace(go.Bar(
+            x=x,
+            y=separations,
+            marker=dict(color=bar_colors),
+            name='Separation',
+            hovertemplate='Layer %{x}<br>Separation: %{y:.3f}<br>Selected: ' +
+                         '<br>'.join([str(s) for s in selected]) + '<extra></extra>',
+            showlegend=False
+        ), row=2, col=1)
+
+        # Update axes
+        fig.update_xaxes(title_text='Layer Index', row=1, col=1, showgrid=True, gridcolor='lightgray')
+        fig.update_yaxes(title_text='Mean Projection', row=1, col=1, showgrid=True, gridcolor='lightgray')
+        fig.update_xaxes(title_text='Layer Index', row=2, col=1, showgrid=True, gridcolor='lightgray')
+        fig.update_yaxes(title_text='|Pos Mean - Neg Mean|', row=2, col=1, showgrid=True, gridcolor='lightgray')
+
+        # Check if selection is contiguous range
+        selected_indices = [i for i, s in enumerate(selected) if s]
+        is_contiguous = (len(selected_indices) > 0 and
+                        selected_indices == list(range(selected_indices[0], selected_indices[-1] + 1)))
+
+        # Create title
+        if is_contiguous and len(selected_indices) > 0:
+            title_text = (f'Selective Layer Steering Analysis: {selection_method}\n'
+                         f'Range [{selected_indices[0]}:{selected_indices[-1]}] '
+                         f'({sum(selected)}/{n_layers} layers)')
+        else:
+            title_text = (f'Selective Layer Steering Analysis: {selection_method}\n'
+                         f'{sum(selected)}/{n_layers} layers selected')
+
+        # Update layout
+        fig.update_layout(
+            title=dict(
+                text=title_text,
+                font=dict(size=16)
+            ),
+            showlegend=True,
+            width=1000,
+            height=900,
+            template='plotly_white',
+            hovermode='closest'
+        )
+
+        if save_name:
+            fig.write_image(self.output_dir / f'selective_steering_{save_name}.png', format='png')
+            self.logger.info(f"  ✓ selective_steering_{save_name}.png")
+
+        # Compute statistics
+        n_selected = sum(selected)
+        selected_layers = [layer_names[i] for i, sel in enumerate(selected) if sel]
+        avg_separation_selected = np.mean([separations[i] for i, sel in enumerate(selected) if sel]) if n_selected > 0 else 0
+        avg_separation_all = np.mean(separations)
+
+        stats = {
+            'n_total_layers': n_layers,
+            'n_selected_layers': n_selected,
+            'selection_ratio': n_selected / n_layers if n_layers > 0 else 0,
+            'selected_layer_names': selected_layers,
+            'avg_separation_selected': float(avg_separation_selected),
+            'avg_separation_all': float(avg_separation_all),
+            'layer_stats': {
+                layer: {
+                    'pos_mean': pos_means[i],
+                    'neg_mean': neg_means[i],
+                    'separation': separations[i],
+                    'selected': selected[i]
+                }
+                for i, layer in enumerate(layer_names)
+            }
+        }
+
+        self.stats['selective_steering'] = stats
+        return stats
+
     def save_statistics(self, save_name: str):
         """Save all computed statistics to JSON"""
         def convert(obj):
@@ -981,11 +1187,11 @@ class ActivationAnalyzer:
             # Return as-is for basic types
             else:
                 return obj
-        
+
         stats_clean = convert(self.stats)
-        
+
         filepath = self.output_dir / f'statistics_{save_name}.json'
         with open(filepath, 'w') as f:
             json.dump(stats_clean, f, indent=2)
-        
+
         self.logger.info(f"  ✓ statistics_{save_name}.json")
