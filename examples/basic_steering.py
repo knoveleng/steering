@@ -95,8 +95,9 @@ def main():
         outputs = pipeline.steer_and_generate(
             test_prompts[:1],  # One prompt for clarity
             theta=theta,
-            max_length=512,
-            system_prompt=args.system_prompt
+            use_chat_template=True,
+            calculate_perplexity=True,
+            **config["generation"],
         )
         elapsed = time.time() - start
 

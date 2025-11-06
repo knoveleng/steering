@@ -168,7 +168,7 @@ def main():
     
     # Load dataset
     print(f"Loading data from {args.data}")
-    prompts = load_data(args.data)
+    prompts = load_data(args.data) # [:5]
     print(f"Loaded {len(prompts)} prompts")
     
     # Determine degrees to test
@@ -196,9 +196,8 @@ def main():
         outputs = pipeline.steer_and_generate(
             prompts,
             theta=degree,  # Fixed: was 'theta' in original
-            max_length=args.max_length,
-            system_prompt=args.system_prompt,
-            calculate_perplexity=not args.no_perplexity
+            calculate_perplexity=not args.no_perplexity,
+            **config["generation"]
         )
         
         # Calculate summary statistics

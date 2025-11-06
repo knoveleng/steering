@@ -209,9 +209,11 @@ def main():
         logger.info(f"\n--- θ = {theta}° ---")
         
         outputs = pipeline_grass.steer_and_generate(
-            test_prompts,
+            test_prompts[:1],  # One prompt for clarity
             theta=theta,
-            max_length=256
+            use_chat_template=True,
+            calculate_perplexity=True,
+            **config["generation"],
         )
         
         print(outputs[0])
