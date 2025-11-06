@@ -106,7 +106,8 @@ class ArtifactsManager:
         basis: tuple,
         projections: Dict[str, tuple],
         config: Dict[str, Any],
-        plane_type: str = "adaptive"
+        plane_type: str = "adaptive",
+        extra_info: Optional[Dict] = None
     ) -> str:
         """
         Universal function to save all calibration artifacts with consistent timestamping.
@@ -139,7 +140,7 @@ class ArtifactsManager:
         # Save individual components using private methods
         self._save_activations(harmful_activations, harmless_activations)
         self._save_directions(candidates, selected_direction, selected_layer)
-        self._save_plane(basis, projections, plane_type)
+        self._save_plane(basis, projections, plane_type, extra_info)
 
         # Save configuration
         config_path = self.session_dir / "config.json"

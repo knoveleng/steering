@@ -242,10 +242,6 @@ class AngularSteeringPipeline:
         self._direction_candidates = candidates
         self._steering_basis = (b1, b2)
 
-        # Use universal save function to eliminate duplication
-        if save_artifacts or run_analysis:
-            self.save_calibration_session(save_artifacts=save_artifacts, run_analysis=run_analysis)
-
         # Step 6: Initialize steering components
         self.logger.info("[6/6] Initializing steering operator...")
         mode = self.config.get('steering', {}).get('mode', 'standard')
@@ -304,10 +300,14 @@ class AngularSteeringPipeline:
 
         self.is_calibrated = True
 
+        # Save artifacts and run analysis AFTER operator is initialized
+        if save_artifacts or run_analysis:
+            self.save_calibration_session(save_artifacts=save_artifacts, run_analysis=run_analysis)
+
         self.logger.info("=" * 60)
         self.logger.info("✓ Calibration Complete!")
         self.logger.info("=" * 60)
-        
+
         return {
             'best_layer': self.best_layer,
             'n_candidates': len(candidates),
@@ -471,6 +471,11 @@ class AngularSteeringPipeline:
         """Generate using transformers"""
         # Register hooks with steering
         target_layers = self._get_target_layers()
+
+        # Debug: Log target layers being hooked
+        self.logger.debug(f"Hooking {len(target_layers)} layers for steering")
+        self.logger.debug(f"First 3 layers: {target_layers[:3] if len(target_layers) > 0 else 'none'}")
+
         self.hook_manager.register_hooks(
             target_layers,
             steering_params={'theta': theta}
@@ -663,12 +668,18 @@ class AngularSteeringPipeline:
             # Calculate projections
             projections = self.plane_constructor.project_candidates_onto_plane(candidates)
 
+            # Get layer steering mask if in selective mode
+            mode = self.config.get('steering', {}).get('mode', 'standard')
+            extra_info = {}
+            if mode == 'selective' and hasattr(self.steering_operator, 'layer_steering_mask'):
+                extra_info['layer_steering_mask'] = self.steering_operator.layer_steering_mask
+
             # Save all artifacts using the universal function
             session_path = self.artifacts.save_calibration_artifacts(
                 harmful_acts, harmless_acts, candidates,
                 self.feature_direction, self.best_layer,
                 (b1, b2), projections, self.config,
-                self.config.get('steering', {}).get('mode', 'standard')
+                mode, extra_info
             )
 
         if run_analysis:
@@ -728,13 +739,55 @@ class AngularSteeringPipeline:
 
         b1, b2 = bundle['plane']['basis']
 
-        # Initialize components
-        mode = self.config.get('steering', {}).get('mode', 'standard')
+        # Use mode from saved config, not current config
+        saved_config = bundle.get('config', {})
+        mode = saved_config.get('steering', {}).get('mode', 'standard')
 
+        self.logger.info(f"Loading calibration with mode: {mode}")
+
+        # Get extraction/target layers from saved calibration
+        # This ensures we hook the same layers that were used during calibration
+        saved_extraction_layers = saved_config.get('extraction_layers', None)
+        saved_target_layers = saved_config.get('target_layers', None)
+
+        # Override current config with saved layer configuration
+        if saved_extraction_layers is not None:
+            self.config['extraction_layers'] = saved_extraction_layers
+        if saved_target_layers is not None:
+            self.config['target_layers'] = saved_target_layers
+
+        # For selective mode, use layers from layer_steering_mask if available
+        extra_info = bundle['plane'].get('extra_info', {})
+        layer_steering_mask = extra_info.get('layer_steering_mask', None)
+
+        if mode == 'selective' and layer_steering_mask is not None:
+            # Override target_layers to match the layers in the mask
+            calibration_layers = list(layer_steering_mask.keys())
+            self.config['target_layers'] = calibration_layers
+            self.logger.info(f"  Using {len(calibration_layers)} layers from calibration")
+
+            # Debug: Log which layers will be steered
+            selected_layers = [name for name, should_steer in layer_steering_mask.items() if should_steer]
+            self.logger.info(f"  Layers to be steered: {selected_layers[:3]}... ({len(selected_layers)} total)")
+
+        # Initialize components based on saved mode
         if mode == 'adaptive':
-            self.steering_operator = AdaptiveSteeringOperator(b1, b2)
+            self.steering_operator = AdaptiveSteeringOperator(b1, b2, cache_rotations=True)
+        elif mode == 'selective':
+            if layer_steering_mask is None:
+                self.logger.warning("Selective mode requested but no layer_steering_mask found in calibration. Falling back to standard mode.")
+                self.steering_operator = AngularSteeringOperator(b1, b2, cache_rotations=True)
+            else:
+                self.steering_operator = SelectiveSteeringOperator(
+                    b1, b2,
+                    layer_steering_mask=layer_steering_mask,
+                    cache_rotations=True
+                )
+                n_selected = sum(layer_steering_mask.values())
+                n_total = len(layer_steering_mask)
+                self.logger.info(f"  ✓ Loaded selective steering with {n_selected}/{n_total} layers selected")
         else:
-            self.steering_operator = AngularSteeringOperator(b1, b2)
+            self.steering_operator = AngularSteeringOperator(b1, b2, cache_rotations=True)
 
         if self.backend == "vllm":
             self._initialize_vllm()
