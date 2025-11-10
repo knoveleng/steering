@@ -3,7 +3,7 @@ Base classes for evaluation
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Union, Tuple
 
 
 class BaseEvaluator(ABC):
@@ -12,17 +12,22 @@ class BaseEvaluator(ABC):
     @abstractmethod
     def evaluate(
         self,
-        outputs: List[str],
-        references: List[str] = None
-    ) -> Dict[str, float]:
+        prompts: List[str],
+        responses: List[str],
+        sampling_params: Optional[Dict[str, Any]] = None,
+        return_labels: bool = False
+    ) -> Union[float, Tuple[float, List[int]]]:
         """
-        Evaluate model outputs
+        Evaluate model responses
         
         Args:
-            outputs: Generated outputs
-            references: Optional reference outputs
+            prompts: List of prompts
+            responses: List of responses
+            sampling_params: Optional sampling parameters for model-based evaluators
+            return_labels: Whether to return labels
             
         Returns:
-            Dictionary of metric scores
+            If return_labels is False: float score
+            If return_labels is True: tuple of (float score, List[int] labels)
         """
         pass
