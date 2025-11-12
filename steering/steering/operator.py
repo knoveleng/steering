@@ -147,7 +147,8 @@ class AdaptiveSteeringOperator(AngularSteeringOperator):
     def steer_activation(
         self,
         activation: torch.Tensor,
-        theta: float
+        theta: float,
+        layer_name: Optional[str] = None
     ) -> torch.Tensor:
         """
         Apply adaptive steering with masking (OLD METHOD for backward compatibility)
