@@ -3,7 +3,7 @@ Complete Angular Steering Pipeline
 """
 
 import torch
-from typing import Dict, List, Optional, Any, Tuple, Literal, Union
+from typing import Dict, List, Optional, Any, Tuple, Union
 from pathlib import Path
 from tqdm import tqdm
 import logging
@@ -28,22 +28,19 @@ class AngularSteeringPipeline:
         self,
         model: torch.nn.Module,
         tokenizer: Any,
-        config: Dict[str, Any],
-        backend: Literal["transformers", "vllm"] = "transformers"
+        config: Dict[str, Any]
     ):
         """
         Initialize pipeline
 
         Args:
-            model: Language model (ignored if backend='vllm')
+            model: Language model
             tokenizer: Model tokenizer
             config: Configuration dictionary
-            backend: Generation backend ('transformers' or 'vllm')
         """
         self.model = model
         self.tokenizer = tokenizer
         self.config = config
-        self.backend = backend
 
         # Setup logger
         self.logger = setup_logger(obj=self)
@@ -93,9 +90,6 @@ class AngularSteeringPipeline:
         self.plane_constructor: Optional[SteeringPlaneConstructor] = None
         self.steering_operator: Optional[AngularSteeringOperator] = None
         self.hook_manager: Optional[ModelHookManager] = None
-        self.vllm_server = None
-        
-
         
         # State
         self.is_calibrated = False
@@ -286,17 +280,13 @@ class AngularSteeringPipeline:
                 cache_rotations=True
             )
 
-        # Initialize backend-specific components
-        if self.backend == "vllm":
-            self._initialize_vllm()
-        else:
-            # Initialize hook manager for transformers
-            self.hook_manager = ModelHookManager(
-                self.model,
-                self.steering_operator
-            )
+        # Initialize hook manager for transformers
+        self.hook_manager = ModelHookManager(
+            self.model,
+            self.steering_operator
+        )
 
-        self.logger.info(f"  ✓ Initialized {mode} steering operator with {self.backend} backend")
+        self.logger.info("  ✓ Initialized %s steering operator", mode)
 
         self.is_calibrated = True
 
@@ -311,35 +301,8 @@ class AngularSteeringPipeline:
         return {
             'best_layer': self.best_layer,
             'n_candidates': len(candidates),
-            'steering_mode': mode,
-            'backend': self.backend
+            'steering_mode': mode
         }
-    
-    def _initialize_vllm(self):
-        """Initialize vLLM server with steering"""
-        from ..serving import VLLMSteeringServer
-
-        self.logger.info("  Initializing vLLM server...")
-
-        target_layers = self._get_target_layers()
-
-        # Get vLLM config
-        vllm_config = self.config.get('vllm', {})
-
-        self.vllm_server = VLLMSteeringServer(
-            model_name=self.config['model']['name'],
-            steering_operator=self.steering_operator,
-            target_layers=target_layers,
-            tensor_parallel_size=vllm_config.get('tensor_parallel_size', 1),
-            gpu_memory_utilization=vllm_config.get('gpu_memory_utilization', 0.9),
-            dtype=self.config['model'].get('dtype', 'bfloat16'),
-        )
-
-        # Clean up original model to free memory
-        if self.model is not None:
-            del self.model
-            self.model = None
-            torch.cuda.empty_cache()
     
     def _format_prompts(
         self,
@@ -418,47 +381,19 @@ class AngularSteeringPipeline:
         # Restore original setting
         self.use_chat_template = original_use_chat
         
-        # Generate based on backend
-        if self.backend == "vllm":
-            results = self._generate_vllm(formatted_prompts, theta, max_length, calculate_perplexity, **generation_kwargs)
-        else:
-            results = self._generate_transformers(formatted_prompts, theta, max_length, calculate_perplexity, **generation_kwargs)
+        # Generate
+        results = self._generate_transformers(
+            formatted_prompts,
+            theta,
+            max_length,
+            calculate_perplexity,
+            **generation_kwargs
+        )
 
         if not calculate_perplexity:
             return [res['response'] for res in results]
 
         return results
-    
-    def _generate_vllm(
-        self,
-        prompts: List[str],
-        theta: float,
-        max_length: int = 100,
-        calculate_perplexity: bool = False,
-        **generation_kwargs
-    ) -> List[Dict[str, str]]:
-        """Generate using vLLM"""
-        if calculate_perplexity:
-            raise NotImplementedError(
-                "Perplexity calculation is not supported for the vLLM backend."
-            )
-        # Set steering parameters
-        self.vllm_server.set_steering(theta)
-        self.vllm_server.enable_steering()
-
-        # Generate
-        outputs = self.vllm_server.generate(
-            prompts,
-            max_tokens=max_length,
-            temperature=generation_kwargs.get('temperature', 0.7),
-            top_p=generation_kwargs.get('top_p', 0.9),
-        )
-
-        # Return as list of dictionaries with prompt and response
-        return [
-            {'prompt': prompt, 'response': output}
-            for prompt, output in zip(prompts, outputs)
-        ]
     
     def _generate_transformers(
         self,
@@ -789,13 +724,10 @@ class AngularSteeringPipeline:
         else:
             self.steering_operator = AngularSteeringOperator(b1, b2, cache_rotations=True)
 
-        if self.backend == "vllm":
-            self._initialize_vllm()
-        else:
-            self.hook_manager = ModelHookManager(
-                self.model,
-                self.steering_operator
-            )
+        self.hook_manager = ModelHookManager(
+            self.model,
+            self.steering_operator
+        )
 
         self.is_calibrated = True
         self.logger.info(f"Calibration loaded from {bundle_dir}")

@@ -59,8 +59,7 @@ def main():
     pipeline = AngularSteeringPipeline(
         model, 
         tokenizer, 
-        config,
-        backend='transformers'
+        config
     )
 
     # Perform calibration

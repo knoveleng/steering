@@ -120,7 +120,7 @@ def initialize_session_state():
         }
 
 
-def load_model_and_calibration(config_path: str, session_path: str, backend: str):
+def load_model_and_calibration(config_path: str, session_path: str):
     """Load model and calibration"""
     try:
         with st.spinner("Loading configuration..."):
@@ -140,8 +140,7 @@ def load_model_and_calibration(config_path: str, session_path: str, backend: str
             pipeline = AngularSteeringPipeline(
                 model,
                 tokenizer,
-                config,
-                backend=backend
+                config
             )
             st.session_state.pipeline = pipeline
         
@@ -195,7 +194,7 @@ def main():
             """)
     else:
         # Status display
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
             st.markdown(f"""
@@ -210,23 +209,12 @@ def main():
         with col2:
             st.markdown(f"""
             <div class="metric-card">
-                <div style="font-size: 0.9rem; opacity: 0.9;">Backend</div>
-                <div style="font-size: 1.2rem; font-weight: 600;">
-                    {settings['backend'].upper()}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div class="metric-card">
                 <div style="font-size: 0.9rem; opacity: 0.9;">Current θ</div>
                 <div style="font-size: 1.2rem; font-weight: 600;">
                     {settings['theta']}°
                 </div>
             </div>
             """, unsafe_allow_html=True)
-        
         st.markdown("---")
         
         # Main content area with tabs

@@ -70,8 +70,6 @@ def plot_optimization_history(history, save_path="analysis/optimization_history.
 def main():
     parser = argparse.ArgumentParser(description="Grassmannian Steering Example")
     parser.add_argument('--config', default='configs/grassmannian.yaml', help='Config file')
-    parser.add_argument('--compare-pca', action='store_true', 
-                       help='Also run PCA baseline for comparison')
     args = parser.parse_args()
 
     # Setup logger
@@ -101,7 +99,7 @@ def main():
     logger.info("GRASSMANNIAN OPTIMIZATION")
     logger.info("="*70)
     
-    pipeline_grass = AngularSteeringPipeline(model, tokenizer, config, backend='transformers')
+    pipeline_grass = AngularSteeringPipeline(model, tokenizer, config)
     
     # Calibrate
     calibration_info = pipeline_grass.calibrate(
@@ -148,53 +146,6 @@ def main():
         
         # Plot optimization history
         plot_optimization_history(history)
-
-    # Compare with PCA baseline if requested
-    if args.compare_pca:
-        logger.info("\n" + "="*70)
-        logger.info("PCA BASELINE (for comparison)")
-        logger.info("="*70)
-        
-        # Create new config with PCA
-        config_pca = config.copy()
-        config_pca['plane_constructor'] = 'pca'
-        
-        # Re-initialize model (to avoid interference)
-        model_pca = AutoModelForCausalLM.from_pretrained(
-            config['model']['name'],
-            torch_dtype=torch.bfloat16,
-            device_map="auto"
-        )
-        
-        pipeline_pca = AngularSteeringPipeline(
-            model_pca, tokenizer, config_pca, backend='transformers'
-        )
-        
-        pipeline_pca.calibrate(
-            harmful_path=config['data']['harmful_dataset'],
-            harmless_path=config['data']['harmless_dataset'],
-            harmful_samples=config['data']['harmful_samples'],
-            harmless_samples=config['data']['harmless_samples'],
-            save_artifacts=True,
-            run_analysis=True
-        )
-        
-        # Compare separability
-        logger.info("\n" + "="*70)
-        logger.info("Comparison: Grassmannian vs PCA")
-        logger.info("="*70)
-        
-        # Get final separability from both methods
-        grass_sep = history['separability'][-1]
-        grass_pres = history['focus'][-1]
-        
-        logger.info(f"Grassmannian - Separability: {grass_sep:.4f}")
-        logger.info(f"Grassmannian - Focus/Alignment: {grass_pres:.4f}")
-        logger.info("PCA baseline - Heuristic (no optimization objective)")
-        
-        improvement = ((grass_sep - grass_pres) / grass_pres * 100 
-                      if grass_pres > 0 else float('inf'))
-        logger.info(f"Relative improvement: {improvement:.2f}%")
 
     # Test steering
     logger.info("\n" + "="*70)

@@ -2,7 +2,7 @@
 
 # Model configuration
 model:
-  name: "Qwen/Qwen2.5-7B-Instruct" # "meta-llama/Llama-3.2-3B-Instruct"
+  name: "Qwen/Qwen2.5-3B-Instruct" # "meta-llama/Llama-3.2-3B-Instruct"
   device: "cuda"
   dtype: "bfloat16"
 
@@ -16,7 +16,7 @@ generation:
 # Chat template configuration
 chat_template:
   enabled: true  # Set to true for instruct models
-  system_prompt: null #"You are a helpful and safe AI assistant."
+  system_prompt: "You are a helpful and safe AI assistant." #"You are a helpful and safe AI assistant."
   add_generation_prompt: true
 
 
@@ -33,7 +33,7 @@ direction:
   
 # Steering configuration
 steering:
-  mode: "standard"  # Options: standard, adaptive, selective
+  mode: "adaptive"  # Options: standard, adaptive, selective
   threshold: 0.0  # For adaptive mode
   cache_rotations: true
 

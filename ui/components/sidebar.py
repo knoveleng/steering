@@ -47,18 +47,11 @@ def render_sidebar():
             st.warning("No calibration sessions found. Run calibration first.")
             session_path = None
         
-        # Backend selection
-        backend = st.selectbox(
-            "Backend",
-            options=["transformers", "vllm"],
-            help="Generation backend"
-        )
-        
         # Load button
         if st.button("🚀 Load Model & Calibration", type="primary", disabled=not session_path):
             if session_path:
                 from ui.app import load_model_and_calibration
-                success = load_model_and_calibration(config_path, session_path, backend)
+                success = load_model_and_calibration(config_path, session_path)
                 if success:
                     st.success("✅ Loaded successfully!")
                     st.rerun()
@@ -142,7 +135,6 @@ def render_sidebar():
     return {
         'config_path': config_path,
         'session_path': session_path,
-        'backend': backend,
         'theta': theta,
         'use_chat_template': use_chat_template if 'use_chat_template' in locals() else True,
         'system_prompt': system_prompt if 'system_prompt' in locals() else None

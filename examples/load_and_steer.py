@@ -51,8 +51,6 @@ def main():
     parser.add_argument('--session-path', type=str, help='Path to calibration session directory')
     parser.add_argument('--artifacts-dir', default='artifacts', help='Base artifacts directory')
     parser.add_argument('--config', default='configs/default.yaml', help='Config file')
-    parser.add_argument('--backend', choices=['transformers', 'vllm'], default='transformers',
-                       help='Generation backend')
     args = parser.parse_args()
 
     # Setup logger
@@ -104,8 +102,7 @@ def main():
     pipeline = AngularSteeringPipeline(
         model, 
         tokenizer, 
-        config,
-        backend=args.backend
+        config
     )
 
     # Load calibration

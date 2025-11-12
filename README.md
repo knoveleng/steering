@@ -24,7 +24,6 @@ Angular Steering provides a principled approach to behavior modification in LLMs
 - 🚀 **Simple API**: Intuitive interface for common steering tasks
 - 📊 **Built-in Evaluation**: Perplexity calculation and comprehensive analysis tools
 - 🎨 **Adaptive Steering**: Context-aware selective behavior modification
-- 🔌 **vLLM Integration**: Support for efficient inference serving
 
 ## Prerequisites
 
@@ -136,7 +135,6 @@ steering/
 │   ├── artifacts/             # Artifact management
 │   ├── data/                  # Data loading utilities
 │   ├── evaluation/            # Evaluation metrics
-│   ├── serving/               # vLLM backend support
 │   └── utils/                 # Helper functions
 ├── configs/                   # Configuration files
 ├── examples/                  # Usage examples and scripts

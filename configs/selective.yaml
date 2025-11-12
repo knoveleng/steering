@@ -20,12 +20,6 @@ chat_template:
   add_generation_prompt: true
 
 
-# vLLM configuration
-vllm:
-  tensor_parallel_size: 1
-  gpu_memory_utilization: 0.9
-  max_model_len: 2048
-
 # Data configuration
 data:
   harmful_dataset: "data/advbench.json"

@@ -1,5 +1,5 @@
 """
-Complete Angular Steering with artifacts, analysis, and multiple backends
+Complete Angular Steering with artifacts, analysis, and transformers backend
 """
 
 import torch
@@ -15,8 +15,6 @@ from steering.utils.logger import setup_logger
 def main():
     parser = argparse.ArgumentParser(description="Angular Steering Pipeline")
     parser.add_argument('--config', default='configs/default.yaml', help='Config file')
-    parser.add_argument('--backend', choices=['transformers', 'vllm'], default='transformers',
-                       help='Generation backend')
     parser.add_argument('--use-chat-template', action='store_true',
                        help='Enable chat template')
     parser.add_argument('--system-prompt', type=str, default=None,
@@ -40,11 +38,10 @@ def main():
             config['chat_template']['system_prompt'] = args.system_prompt
 
     logger.info("="*60)
-    logger.info(f"Angular Steering - {args.backend.upper()} Backend")
+    logger.info("Angular Steering - Transformers Backend")
     logger.info("="*60)
     logger.info(f"Model: {config['model']['name']}")
     logger.info(f"Chat Template: {config.get('chat_template', {}).get('enabled', False)}")
-    logger.info(f"Backend: {args.backend}")
 
     # Load model
     logger.info("Loading model...")
@@ -60,13 +57,12 @@ def main():
     pipeline = AngularSteeringPipeline(
         model, 
         tokenizer, 
-        config,
-        backend=args.backend
+        config
     )
     
     # Calibrate with analysis
     logger.info("Calibrating...")
-    calibration_info = pipeline.calibrate(
+    pipeline.calibrate(
         harmful_path=config['data']['harmful_dataset'],
         harmless_path=config['data']['harmless_dataset'],
         harmful_samples=config['data']['harmful_samples'],
@@ -115,7 +111,6 @@ def main():
     stats = pipeline.analyzer.stats
     logger.info(f"Best layer: {stats['direction_statistics']['best_layer_name']}")
     logger.info(f"Feature separation: {stats['feature_alignment']['mean_separation']:.3f}")
-    logger.info(f"Backend: {args.backend}")
     logger.info(f"Generated files in:")
     logger.info(f"  • {config['artifacts_dir']}/")
     logger.info(f"  • {config['analysis_dir']}/")
