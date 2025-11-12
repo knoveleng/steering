@@ -62,45 +62,46 @@ def render_sidebar():
         # Initialize theta value if not exists
         if 'theta_value' not in st.session_state:
             st.session_state.theta_value = 100
+            st.session_state.theta_slider = 100
+            st.session_state.theta_input = 100
+
+        # Sync logic BEFORE creating widgets
+        # Check if slider changed from stored value
+        if 'theta_slider' in st.session_state and st.session_state.theta_slider != st.session_state.theta_value:
+            # Slider was moved, update input to match
+            st.session_state.theta_value = st.session_state.theta_slider
+            st.session_state.theta_input = st.session_state.theta_slider
+        # Check if input changed from stored value
+        elif 'theta_input' in st.session_state and st.session_state.theta_input != st.session_state.theta_value:
+            # Input was changed, update slider to match
+            st.session_state.theta_value = st.session_state.theta_input
+            st.session_state.theta_slider = st.session_state.theta_input
 
         # Theta controls - both slider and number input
         col1, col2 = st.columns([3, 1])
 
         with col1:
-            theta_slider = st.slider(
+            st.slider(
                 "Steering Angle (θ)",
                 min_value=0,
                 max_value=360,
-                value=st.session_state.theta_value,
                 step=10,
                 help="Rotation angle in the steering plane",
                 key="theta_slider"
             )
 
         with col2:
-            theta_input = st.number_input(
+            st.number_input(
                 "θ°",
                 min_value=0,
                 max_value=360,
-                value=st.session_state.theta_value,
                 step=1,
                 help="Type exact value",
                 key="theta_input"
             )
 
-        # Sync theta value - check which control changed
-        # If slider changed from the stored value, use slider
-        if theta_slider != st.session_state.theta_value:
-            theta = theta_slider
-        # If input changed from the stored value, use input
-        elif theta_input != st.session_state.theta_value:
-            theta = theta_input
-        # Otherwise use the stored value
-        else:
-            theta = st.session_state.theta_value
-
-        # Update the stored value
-        st.session_state.theta_value = theta
+        # Use the synced value
+        theta = st.session_state.theta_value
         
         # Show theta visually
         st.markdown(f'<div class="theta-display">{theta}°</div>', unsafe_allow_html=True)
