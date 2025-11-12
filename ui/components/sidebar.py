@@ -59,43 +59,48 @@ def render_sidebar():
         st.markdown("---")
         st.markdown("### 🎯 Steering Control")
         
+        # Initialize theta value if not exists
+        if 'theta_value' not in st.session_state:
+            st.session_state.theta_value = 100
+
         # Theta controls - both slider and number input
         col1, col2 = st.columns([3, 1])
-        
+
         with col1:
             theta_slider = st.slider(
                 "Steering Angle (θ)",
                 min_value=0,
                 max_value=360,
-                value=st.session_state.get('theta_value', 100),
+                value=st.session_state.theta_value,
                 step=10,
                 help="Rotation angle in the steering plane",
                 key="theta_slider"
             )
-        
+
         with col2:
             theta_input = st.number_input(
                 "θ°",
                 min_value=0,
                 max_value=360,
-                value=st.session_state.get('theta_value', 100),
+                value=st.session_state.theta_value,
                 step=1,
                 help="Type exact value",
                 key="theta_input"
             )
-        
-        # Sync theta value - prioritize the input that changed
-        if 'last_theta' not in st.session_state:
-            st.session_state.last_theta = 100
-        
-        # Determine which control was used
-        if theta_input != st.session_state.last_theta:
-            theta = theta_input
-        else:
+
+        # Sync theta value - check which control changed
+        # If slider changed from the stored value, use slider
+        if theta_slider != st.session_state.theta_value:
             theta = theta_slider
-        
+        # If input changed from the stored value, use input
+        elif theta_input != st.session_state.theta_value:
+            theta = theta_input
+        # Otherwise use the stored value
+        else:
+            theta = st.session_state.theta_value
+
+        # Update the stored value
         st.session_state.theta_value = theta
-        st.session_state.last_theta = theta
         
         # Show theta visually
         st.markdown(f'<div class="theta-display">{theta}°</div>', unsafe_allow_html=True)
