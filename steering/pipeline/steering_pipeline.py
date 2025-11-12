@@ -499,53 +499,6 @@ class AngularSteeringPipeline:
 
         return outputs
     
-    def evaluate_steering(
-        self,
-        eval_prompts: List[str],
-        theta_range: List[float],
-        max_length: int = 100,
-        system_prompt: Optional[str] = None
-    ) -> Dict[float, Dict[str, Any]]:
-        """
-        Evaluate steering across multiple angles
-        
-        Args:
-            eval_prompts: Prompts for evaluation
-            theta_range: List of angles to evaluate
-            max_length: Generation length
-            system_prompt: Optional system prompt
-            
-        Returns:
-            Dict mapping theta to evaluation results
-        """
-        results = {}
-        
-        for theta in theta_range:
-            self.logger.info(f"Evaluating at θ = {theta}°...")
-
-            # Generate with steering
-            outputs = self.steer_and_generate(
-                eval_prompts,
-                theta,
-                max_length=max_length,
-                system_prompt=system_prompt
-            )
-
-            # Evaluate
-            metrics = self.evaluator.evaluate_all(
-                outputs,
-                compute_perplexity=False  # Can be slow
-            )
-
-            results[theta] = {
-                'metrics': metrics,
-                'sample_outputs': outputs[:3]  # Store a few samples
-            }
-
-            self.logger.info(f"  Refusal Score: {metrics['refusal_score']:.3f}")
-        
-        return results
-    
     def _get_extraction_layers(self) -> List[str]:
         """Get layer names for activation extraction"""
         if 'extraction_layers' in self.config:
