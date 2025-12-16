@@ -343,7 +343,8 @@ class AngularSteeringPipeline:
         self,
         prompts: Union[str, List[str]],
         theta: float,
-        max_length: int = 100,
+        max_length: Optional[int] = None,
+        max_new_tokens: Optional[int] = None,
         system_prompt: Optional[str] = None,
         use_chat_template: Optional[bool] = None,
         calculate_perplexity: bool = False,
@@ -355,7 +356,8 @@ class AngularSteeringPipeline:
         Args:
             prompts: Input prompt(s) (string or list)
             theta: Steering angle in degrees
-            max_length: Maximum generation length
+            max_length: Maximum total generation length (deprecated, use max_new_tokens)
+            max_new_tokens: Maximum number of new tokens to generate
             system_prompt: Optional system prompt for chat template
             use_chat_template: Override global chat template setting
             calculate_perplexity: If True, calculate and return perplexity scores
@@ -375,6 +377,9 @@ class AngularSteeringPipeline:
         if use_chat_template is not None:
             self.use_chat_template = use_chat_template
         
+        # Convert single prompt to list for tracking
+        original_prompts = [prompts] if isinstance(prompts, str) else prompts
+        
         # Format prompts
         formatted_prompts = self._format_prompts(prompts, system_prompt)
         
@@ -385,8 +390,10 @@ class AngularSteeringPipeline:
         results = self._generate_transformers(
             formatted_prompts,
             theta,
-            max_length,
-            calculate_perplexity,
+            original_prompts=original_prompts,
+            max_length=max_length,
+            max_new_tokens=max_new_tokens,
+            calculate_perplexity=calculate_perplexity,
             **generation_kwargs
         )
 
@@ -399,11 +406,24 @@ class AngularSteeringPipeline:
         self,
         prompts: List[str],
         theta: float,
-        max_length: int = 100,
+        original_prompts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        max_new_tokens: Optional[int] = None,
         calculate_perplexity: bool = False,
         **generation_kwargs
     ) -> List[Dict[str, Any]]:
-        """Generate using transformers"""
+        """
+        Generate using transformers
+        
+        Args:
+            prompts: Formatted prompts (may include system/special tokens)
+            theta: Steering angle in degrees
+            original_prompts: Original unformatted prompts (without system/special tokens)
+            max_length: Maximum total length (deprecated)
+            max_new_tokens: Maximum new tokens to generate
+            calculate_perplexity: Whether to calculate perplexity
+            **generation_kwargs: Additional generation parameters
+        """
         # Register hooks with steering
         target_layers = self._get_target_layers()
 
@@ -430,8 +450,16 @@ class AngularSteeringPipeline:
                 bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
             )
             
-            for prompt in pbar:
-                # Tokenize prompt
+            for idx, prompt in enumerate(pbar):
+                # Get original unformatted prompt (without system/special tokens)
+                if original_prompts and idx < len(original_prompts):
+                    original_prompt = original_prompts[idx]
+                else:
+                    # Fallback: use formatted prompt if original not provided
+                    original_prompt = prompt
+                
+                print(f"Prompt: {prompt}")
+                # Tokenize prompt (this includes system prompt and special tokens if chat template was used)
                 inputs = self.tokenizer(
                     prompt,
                     return_tensors='pt',
@@ -439,22 +467,39 @@ class AngularSteeringPipeline:
                     truncation=True
                 ).to(self.model.device)
                 
+                # Calculate prompt length (includes system tokens, special tokens, and assistant start tokens)
+                # This is the full input that goes to the model, including:
+                # - System prompt tokens (if any)
+                # - Chat template special tokens (e.g., <|im_start|>, <|im_end|>)
+                # - User message tokens
+                # - Assistant start tokens (if add_generation_prompt=True)
                 prompt_length = inputs['input_ids'].shape[1]
+
+                # Prepare generation parameters
+                # Prefer max_new_tokens over max_length to avoid input length issues
+                gen_kwargs = generation_kwargs.copy()
+                if max_new_tokens is not None:
+                    gen_kwargs['max_new_tokens'] = max_new_tokens
+                elif max_length is not None:
+                    gen_kwargs['max_length'] = max_length
+                else:
+                    # Default fallback
+                    gen_kwargs['max_new_tokens'] = 100
 
                 # Generate
                 output_ids = self.model.generate(
                     **inputs,
-                    max_length=max_length,
-                    **generation_kwargs
+                    **gen_kwargs
                 )
 
-                # Decode
+                # Decode generated text (everything after prompt_length)
                 output_text = self.tokenizer.decode(
                     output_ids[0][prompt_length:],
                     skip_special_tokens=True
                 )
 
-                result = {'prompt': prompt, 'response': output_text}
+                # Store original prompt (without system/special tokens) and response
+                result = {'prompt': original_prompt, 'response': output_text}
 
                 if calculate_perplexity:
                     # Update progress bar for perplexity calculation
@@ -464,9 +509,14 @@ class AngularSteeringPipeline:
                     self.hook_manager.remove_hooks()
                     
                     # Calculate perplexity only on generated tokens
+                    # Mask all prompt tokens including:
+                    # - System prompt tokens (if any)
+                    # - Chat template special tokens (<|im_start|>, <|im_end|>, etc.)
+                    # - User message tokens
+                    # - Assistant start tokens (if add_generation_prompt=True)
+                    # All of these are part of the input and should not be included in perplexity
                     labels = output_ids.clone()
-                    # Mask prompt tokens (set to -100 so they're ignored in loss)
-                    labels[:, :prompt_length] = -100
+                    labels[:, :prompt_length] = -100  # -100 means ignore in loss calculation
                     
                     # Calculate loss with proper masking
                     model_outputs = self.model(
