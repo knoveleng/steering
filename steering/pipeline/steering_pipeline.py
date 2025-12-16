@@ -676,6 +676,40 @@ class AngularSteeringPipeline:
         bundle = self.artifacts.load_calibration(bundle_dir)
 
         b1, b2 = bundle['plane']['basis']
+        
+        # Ensure b1 and b2 are 1D tensors (basis vectors should be 1D)
+        # Handle potential shape issues from save/load
+        if b1.dim() > 1:
+            if b1.dim() == 2 and b1.shape[0] == 1:
+                b1 = b1.squeeze(0)
+            elif b1.dim() == 2 and b1.shape[1] == 1:
+                b1 = b1.squeeze(1)
+            else:
+                raise RuntimeError(
+                    f"b1 should be 1D but got shape {b1.shape}. "
+                    f"This indicates a calibration save/load issue."
+                )
+        
+        if b2.dim() > 1:
+            if b2.dim() == 2 and b2.shape[0] == 1:
+                b2 = b2.squeeze(0)
+            elif b2.dim() == 2 and b2.shape[1] == 1:
+                b2 = b2.squeeze(1)
+            else:
+                raise RuntimeError(
+                    f"b2 should be 1D but got shape {b2.shape}. "
+                    f"This indicates a calibration save/load issue."
+                )
+        
+        # Log shapes for debugging
+        self.logger.info(f"Loaded basis vectors: b1.shape={b1.shape}, b2.shape={b2.shape}")
+        
+        # Ensure they have the same hidden dimension
+        if b1.shape[0] != b2.shape[0]:
+            raise RuntimeError(
+                f"b1 and b2 must have same hidden dimension, "
+                f"but got b1.shape={b1.shape}, b2.shape={b2.shape}"
+            )
 
         # Use mode from saved config, not current config
         saved_config = bundle.get('config', {})

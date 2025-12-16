@@ -170,13 +170,46 @@ class AdaptiveSteeringOperator(AngularSteeringOperator):
         # Get basis vectors with correct dtype and device
         b1 = self.b1.to(device=original_device, dtype=original_dtype)
         P = self.P.to(device=original_device, dtype=original_dtype)
+        
+        # Ensure b1 is 1D (should always be, but check for safety)
+        if b1.dim() > 1:
+            if b1.dim() == 2 and b1.shape[0] == 1:
+                b1 = b1.squeeze(0)
+            elif b1.dim() == 2 and b1.shape[1] == 1:
+                b1 = b1.squeeze(1)
+            else:
+                raise RuntimeError(
+                    f"b1 should be 1D but got shape {b1.shape}. "
+                    f"This indicates a calibration issue."
+                )
 
         # Compute alignment with feature direction
-        alignment = torch.matmul(activation, b1)
+        # Handle different activation shapes: (..., hidden_dim) or (hidden_dim,)
+        if activation.dim() == 1:
+            # 1D case: (hidden_dim,) -> scalar alignment
+            if activation.shape[0] != b1.shape[0]:
+                raise RuntimeError(
+                    f"Activation dimension mismatch: activation.shape={activation.shape}, "
+                    f"b1.shape={b1.shape}. Activation should have last dimension matching b1."
+                )
+            alignment = torch.dot(activation, b1)
+        else:
+            # Multi-dimensional case: (..., hidden_dim) -> (...,)
+            if activation.shape[-1] != b1.shape[0]:
+                raise RuntimeError(
+                    f"Activation dimension mismatch: activation.shape={activation.shape}, "
+                    f"b1.shape={b1.shape}. Activation last dimension should match b1."
+                )
+            alignment = torch.matmul(activation, b1)
 
         # Create mask: only steer activations aligned with feature
         mask = (alignment > self.threshold).to(dtype=original_dtype)
-        mask = mask.unsqueeze(-1)  # Add dimension for broadcasting
+        # Ensure mask has correct shape for broadcasting
+        if mask.dim() == 0:
+            # Scalar mask - expand to match activation shape
+            mask = mask.unsqueeze(-1)
+        else:
+            mask = mask.unsqueeze(-1)  # Add dimension for broadcasting
 
         # Project onto steering plane
         proj_h = torch.matmul(activation, P.T)
