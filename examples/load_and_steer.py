@@ -132,7 +132,7 @@ def main():
             theta=theta,
             max_length=512,
             system_prompt=None,
-            # calculate_perplexity=True
+            calculate_perplexity=True
         )
         elapsed = time.time() - start
 

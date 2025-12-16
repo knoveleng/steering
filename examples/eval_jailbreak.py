@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         nargs="+",
         default=["substring", "llama_guard", "harmbench"],
-        choices=["substring", "llama_guard", "harmbench"],
+        choices=["substring", "llama_guard", "harmbench", "ngram_repetition", "language_consistency", "compression_ratio", "qwen3guard", "polyguard", "llm_judge"],
         help="List of evaluators to use"
     )
     

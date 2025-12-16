@@ -14,14 +14,6 @@ def parse_args():
         description="Run angular steering experiments with configurable parameters"
     )
     
-    # Required arguments
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="./configs/default.yaml",
-        help="Path to configuration YAML file (default: ./configs/default.yaml)"
-    )
-    
     parser.add_argument(
         "--calibration",
         type=str,
@@ -146,9 +138,10 @@ def save_results(output_dir: Path, degree: int, outputs: List[Dict[str, Any]], m
 def main():
     args = parse_args()
     
-    # Load configuration and model
-    print(f"Loading configuration from {args.config}")
-    config = ConfigLoader.load(args.config)
+    # Load configuration from calibration directory. Config is stored in the calibration directory. It is a json file.
+    print(f"Loading configuration from {args.calibration}")
+    with open(Path(args.calibration) / "config.json", "r") as f:
+        config = json.load(f)
     
     print(f"Loading model: {config['model']['name']}")
     model = AutoModelForCausalLM.from_pretrained(
