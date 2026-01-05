@@ -1,42 +1,36 @@
 #!/bin/bash
 
 # Evaluate robustness benchmarks for all models
-# This script runs both generation and evaluation for robustness benchmarks
+# Uses single calibration per model with --mode override
 
-# Models to evaluate
+# Models to evaluate (just the base names)
 MODELS=(
-    "google/gemma-2-2b-it"
-    "google/gemma-2-9b-it"
-    "meta-llama/Llama-3.2-1B-Instruct"
-    "meta-llama/Llama-3.2-3B-Instruct"
-    "meta-llama/Llama-3.1-8B-Instruct"
-    "Qwen/Qwen2.5-1.5B-Instruct"
-    "Qwen/Qwen2.5-3B-Instruct"
-    "Qwen/Qwen2.5-7B-Instruct"
+    "Qwen2.5-1.5B-Instruct"
+    "Qwen2.5-3B-Instruct"
+    "Qwen2.5-7B-Instruct"
+    "Llama-3.2-1B-Instruct"
+    "Llama-3.2-3B-Instruct"
+    "Llama-3.1-8B-Instruct"
+    "gemma-2-9b-it"
+    "gemma-2-2b-it"
 )
-# MODELS=(
-#     "meta-llama/Llama-3.1-8B-Instruct"
-#     "meta-llama/Llama-3.2-1B-Instruct"
-#     "Qwen/Qwen2.5-1.5B-Instruct"
-#     "Qwen/Qwen2.5-3B-Instruct"
-#     "Qwen/Qwen2.5-7B-Instruct"
-#     "google/gemma-2-2b-it"
-# )
 
 # Steering modes to evaluate
 STEERING_MODES=(
-    # "basic"
+    # "addition"   # ignore because we can extract from best theta via standard mode
+    "ablation"
+    "standard"
     "adaptive"
     "selective"
 )
 
 # Benchmarks to evaluate
 BENCHMARKS=(
-    "tinyMMLU"
     "tinyGSM8k"
-    "tinyAI2_arc"
     "tinyWinogrande"
     "tinyTruthfulQA"
+    "tinyMMLU"
+    "tinyAI2_arc"
 )
 
 # Folders
@@ -47,45 +41,58 @@ EVALUATION_FOLDER="logs/robustness-evaluation"
 # Degree range for steering
 DEGREE_START=0
 DEGREE_END=360
-DEGREE_STEP=10
+DEGREE_STEP=30
 
 echo "=========================================="
 echo "Robustness Evaluation for All Models"
 echo "=========================================="
 
-for MODEL_ID in "${MODELS[@]}"; do
-    # Get base_name from model_id. Eg. google/gemma-2-2b-it -> gemma-2-2b-it
-    base_name=$(echo $MODEL_ID | cut -d '/' -f 2)
+for model_name in "${MODELS[@]}"; do
+    # Use single calibration per model (no mode suffix)
+    calibration_path="$CALIBRATION_FOLDER/calibration_${model_name}"
+    
+    # Check if calibration exists
+    if [ ! -d "$calibration_path" ]; then
+        echo "Skipping $model_name: calibration not found at $calibration_path"
+        continue
+    fi
     
     for STEERING_MODE in "${STEERING_MODES[@]}"; do
-        calibration_path="$CALIBRATION_FOLDER/calibration_${base_name}_${STEERING_MODE}"
-        
-        # Check if calibration exists
-        if [ ! -d "$calibration_path" ]; then
-            echo "Skipping $MODEL_ID ($STEERING_MODE): calibration not found at $calibration_path"
-            continue
-        fi
-        
         for BENCHMARK in "${BENCHMARKS[@]}"; do
             echo ""
             echo "=========================================="
-            echo "Model: $MODEL_ID"
+            echo "Model: $model_name"
             echo "Mode: $STEERING_MODE"
             echo "Benchmark: $BENCHMARK"
             echo "=========================================="
             
-            generation_dir="$GENERATION_FOLDER/$STEERING_MODE/$base_name/$BENCHMARK"
-            evaluation_dir="$EVALUATION_FOLDER/$STEERING_MODE/$base_name/$BENCHMARK"
+            generation_dir="$GENERATION_FOLDER/$STEERING_MODE/$model_name/$BENCHMARK"
+            evaluation_dir="$EVALUATION_FOLDER/$STEERING_MODE/$model_name/$BENCHMARK"
             
-            # Step 1: Generate responses
+            # Step 1: Generate responses with mode override
             echo "Step 1: Generating responses..."
-            python examples/generate_robustness.py \
-                --calibration $calibration_path \
-                --benchmark $BENCHMARK \
-                --output-dir $generation_dir \
-                --degree-start $DEGREE_START \
-                --degree-end $DEGREE_END \
-                --degree-step $DEGREE_STEP
+            
+            # For ablation mode, only use one degree (it doesn't depend on theta)
+            if [ "$STEERING_MODE" == "ablation" ]; then
+                echo "  Ablation mode: using single degree (0)"
+                python examples/generate_robustness.py \
+                    --calibration $calibration_path \
+                    --mode $STEERING_MODE \
+                    --benchmark $BENCHMARK \
+                    --output-dir $generation_dir \
+                    --degree-start 0 \
+                    --degree-end 0 \
+                    --degree-step 10
+            else
+                python examples/generate_robustness.py \
+                    --calibration $calibration_path \
+                    --mode $STEERING_MODE \
+                    --benchmark $BENCHMARK \
+                    --output-dir $generation_dir \
+                    --degree-start $DEGREE_START \
+                    --degree-end $DEGREE_END \
+                    --degree-step $DEGREE_STEP
+            fi
             
             # Step 2: Evaluate responses
             echo "Step 2: Evaluating responses..."
@@ -94,7 +101,7 @@ for MODEL_ID in "${MODELS[@]}"; do
                 --output-dir $evaluation_dir \
                 --benchmark $BENCHMARK
             
-            echo "Completed: $MODEL_ID / $STEERING_MODE / $BENCHMARK"
+            echo "Completed: $model_name / $STEERING_MODE / $BENCHMARK"
         done
     done
 done

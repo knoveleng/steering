@@ -1,5 +1,6 @@
 #!/bin/bash
 # Evaluation script for perplexity experiments across multiple models and steering modes
+# Uses single calibration per model with --mode override
 
 set -e  # Exit on error
 set -u  # Exit on undefined variable
@@ -11,22 +12,25 @@ DEGREE_END=360
 DEGREE_STEP=10
 GPU_MEMORY_UTILIZATION=0.85
 BASE_OUTPUT_DIR="./logs/perplexity"
+CALIBRATION_FOLDER="./artifacts"
 
-# Models to evaluate
+# Models to evaluate (just the base names)
 MODELS=(
-    "google/gemma-2-2b-it"
-    "google/gemma-2-9b-it"
-    "meta-llama/Llama-3.2-1B-Instruct"
-    "meta-llama/Llama-3.2-3B-Instruct"
-    "meta-llama/Llama-3.1-8B-Instruct"
-    "Qwen/Qwen2.5-1.5B-Instruct"
-    "Qwen/Qwen2.5-3B-Instruct"
-    "Qwen/Qwen2.5-7B-Instruct"
+    "gemma-2-2b-it"
+    "gemma-2-9b-it"
+    "Llama-3.2-1B-Instruct"
+    "Llama-3.2-3B-Instruct"
+    "Llama-3.1-8B-Instruct"
+    "Qwen2.5-1.5B-Instruct"
+    "Qwen2.5-3B-Instruct"
+    "Qwen2.5-7B-Instruct"
 )
 
 # Steering modes to evaluate
 STEERING_MODES=(
-    "basic"     # standard steering
+    # "addition"   # ignore because we can extract from best theta via standard mode
+    "ablation"
+    "standard"
     "adaptive"
     "selective"
 )
@@ -83,46 +87,65 @@ main() {
     local skip_count=0
     local error_count=0
 
-    for model in "${MODELS[@]}"; do
-        # Extract model name from model path. E.g google/gemma-2-9b-it -> gemma-2-9b-it
-        model_name=$(basename $model)
-        echo "Model name: $model_name"
+    for model_name in "${MODELS[@]}"; do
+        # Use single calibration per model (no mode suffix)
+        calibration_dir="${CALIBRATION_FOLDER}/calibration_${model_name}"
         
         for steering_mode in "${STEERING_MODES[@]}"; do
             current=$((current + 1))
             
-            # Build paths
-            calibration_dir="./artifacts/calibration_${model_name}_${steering_mode}"
+            # Use mode name directly for output folder
             output_dir="${BASE_OUTPUT_DIR}/${steering_mode}"
             
             # Log progress
             echo ""
-            log_info "[$current/$total_combinations] Evaluating $model with $steering_mode steering"
+            log_info "[$current/$total_combinations] Evaluating $model_name with $steering_mode steering"
             log_info "  Calibration: $calibration_dir"
+            log_info "  Mode: $steering_mode"
             log_info "  Output: $output_dir"
             
             # Check if calibration exists
             if ! check_calibration_exists "$calibration_dir"; then
-                log_warning "Skipping $model/$steering_mode (calibration not found)"
+                log_warning "Skipping $model_name/$steering_mode (calibration not found)"
                 skip_count=$((skip_count + 1))
                 continue
             fi
             
-            # Run evaluation - If you wanna use naive transformers, please use eval_perplexity.py
-            if python examples/eval_perplexity_vllm.py \
-                --data "$DATA_FILE" \
-                --calibration "$calibration_dir" \
-                --degree-start "$DEGREE_START" \
-                --degree-end "$DEGREE_END" \
-                --degree-step "$DEGREE_STEP" \
-                --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
-                --output-dir "$output_dir"; then
-                log_success "Completed $model/$steering_mode"
-                success_count=$((success_count + 1))
+            # For ablation mode, only use one degree (it doesn't depend on theta)
+            if [ "$steering_mode" == "ablation" ]; then
+                log_info "  Ablation mode: using single degree (0)"
+                if python examples/eval_perplexity_vllm.py \
+                    --data "$DATA_FILE" \
+                    --calibration "$calibration_dir" \
+                    --mode "$steering_mode" \
+                    --degree-start 0 \
+                    --degree-end 0 \
+                    --degree-step 10 \
+                    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
+                    --output-dir "$output_dir"; then
+                    log_success "Completed $model_name/$steering_mode"
+                    success_count=$((success_count + 1))
+                else
+                    log_error "Failed $model_name/$steering_mode"
+                    error_count=$((error_count + 1))
+                fi
             else
-                log_error "Failed $model/$steering_mode"
-                error_count=$((error_count + 1))
-                # Continue with next combination even if one fails
+                # Standard evaluation with full degree range
+                if python examples/eval_perplexity_vllm.py \
+                    --data "$DATA_FILE" \
+                    --calibration "$calibration_dir" \
+                    --mode "$steering_mode" \
+                    --degree-start "$DEGREE_START" \
+                    --degree-end "$DEGREE_END" \
+                    --degree-step "$DEGREE_STEP" \
+                    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
+                    --output-dir "$output_dir"; then
+                    log_success "Completed $model_name/$steering_mode"
+                    success_count=$((success_count + 1))
+                else
+                    log_error "Failed $model_name/$steering_mode"
+                    error_count=$((error_count + 1))
+                fi
             fi
         done
     done
