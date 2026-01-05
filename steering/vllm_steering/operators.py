@@ -16,6 +16,8 @@ class SteeringMode(str, Enum):
     STANDARD = "standard"
     ADAPTIVE = "adaptive"
     SELECTIVE = "selective"
+    ADDITION = "addition"
+    ABLATION = "ablation"
     
     @classmethod
     def from_string(cls, mode: str) -> "SteeringMode":
@@ -92,6 +94,15 @@ class BaseSteeringOperator:
         """Clear all cached tensors."""
         self._device_cache.clear()
         self._rotation_cache.clear()
+    
+    def clear_rotation_cache(self):
+        """Clear only rotation cache (not device tensors).
+        
+        Use this when theta changes to avoid OOM from accumulating rotation
+        vectors/matrices, while preserving device tensors to maintain
+        floating-point consistency.
+        """
+        self._rotation_cache.clear()
 
 
 class StandardSteeringOperator(BaseSteeringOperator):
@@ -109,10 +120,12 @@ class StandardSteeringOperator(BaseSteeringOperator):
         dtype: torch.dtype
     ) -> torch.Tensor:
         """Get cached rotation vector v_theta = cos(θ)*b1 + sin(θ)*b2."""
-        key = (device, dtype, theta, 'vector')
+        # Normalize theta to [0, 360) so 0° and 360° are treated identically
+        theta_normalized = theta % 360
+        key = (device, dtype, theta_normalized, 'vector')
         if key not in self._rotation_cache:
             cached = self._get_device_tensors(device, dtype)
-            theta_rad = math.radians(theta)
+            theta_rad = math.radians(theta_normalized)
             self._rotation_cache[key] = (
                 math.cos(theta_rad) * cached['b1'] + 
                 math.sin(theta_rad) * cached['b2']
@@ -211,10 +224,12 @@ class SelectiveSteeringOperator(BaseSteeringOperator):
         dtype: torch.dtype
     ) -> torch.Tensor:
         """Get cached rotation matrix V_θ."""
-        key = (device, dtype, theta, 'matrix')
+        # Normalize theta to [0, 360) so 0° and 360° are treated identically
+        theta_normalized = theta % 360
+        key = (device, dtype, theta_normalized, 'matrix')
         if key not in self._rotation_cache:
             cached = self._get_device_tensors(device, dtype)
-            theta_rad = math.radians(theta)
+            theta_rad = math.radians(theta_normalized)
             cos_t, sin_t = math.cos(theta_rad), math.sin(theta_rad)
             self._rotation_cache[key] = (
                 cos_t * cached['P'] + 
@@ -256,6 +271,113 @@ class SelectiveSteeringOperator(BaseSteeringOperator):
         return hidden_states - proj_h + torch.matmul(hidden_states, V_theta.T)
 
 
+class AdditionSteeringOperator(BaseSteeringOperator):
+    """
+    Vector addition steering operator - a special case of Angular Steering.
+    
+    From baselines.md, Addition h' = h + α·d produces an equivalent rotation.
+    
+    To match StandardSteeringOperator's behavior where θ is the absolute angle
+    from b1 (not a relative offset), we compute α such that the result points
+    in the same direction as the standard steering at angle θ.
+    
+    For absolute angle θ, the target direction is:
+        cos(θ)·b1 + sin(θ)·b2
+        
+    Since Addition only adds along b1, we compute α to achieve the same
+    projection ratio ||h_parallel|| / ||h'|| = cos(θ).
+    """
+    
+    def steer(
+        self,
+        hidden_states: torch.Tensor,
+        theta: float,
+        layer_name: Optional[str] = None,
+    ) -> torch.Tensor:
+        """
+        Apply vector addition steering to achieve absolute angle θ.
+        
+        Given theta (absolute angle in degrees from b1), computes α and applies:
+            h' = h + α·d
+            
+        The result is normalized to preserve the magnitude on the steering plane.
+        """
+        device = hidden_states.device
+        dtype = hidden_states.dtype
+        
+        cached = self._get_device_tensors(device, dtype)
+        d = cached['b1']  # Feature direction (d = b1)
+        b2 = cached['b2']  # Orthogonal direction
+        
+        # Convert theta to radians
+        theta_rad = math.radians(theta)
+        
+        # Compute projection onto the 2D plane spanned by b1 and b2
+        h_dot_b1 = torch.matmul(hidden_states, d)  # Projection onto b1
+        h_dot_b2 = torch.matmul(hidden_states, b2)  # Projection onto b2
+        
+        # Compute the norm of projection onto the plane: r = sqrt(h·b1² + h·b2²)
+        r = torch.sqrt(h_dot_b1**2 + h_dot_b2**2)
+        
+        # Target projection onto b1 after steering: r * cos(θ)
+        target_h_dot_b1 = r * math.cos(theta_rad)
+        
+        # α = target_h_dot_b1 - h_dot_b1
+        alpha = target_h_dot_b1 - h_dot_b1
+        
+        # Apply: h' = h + α·d
+        # This changes the b1 component while preserving the b2 component
+        h_steered = hidden_states + alpha.unsqueeze(-1) * d
+        
+        # To fully match Standard steering, we also need to adjust the b2 component
+        # Target projection onto b2: r * sin(θ)  
+        target_h_dot_b2 = r * math.sin(theta_rad)
+        beta = target_h_dot_b2 - h_dot_b2
+        h_steered = h_steered + beta.unsqueeze(-1) * b2
+        
+        return h_steered
+
+
+class AblationSteeringOperator(BaseSteeringOperator):
+    """
+    Directional ablation (orthogonalization) operator - a special case of Angular Steering.
+    
+    From baselines.md:
+        h_ablate = h_⊥ = h - (h·d)·d
+        
+    This is equivalent to rotating to θ = 90° (π/2).
+    The theta parameter is ignored since ablation always produces the orthogonal component.
+    """
+    
+    def steer(
+        self,
+        hidden_states: torch.Tensor,
+        theta: float,
+        layer_name: Optional[str] = None,
+    ) -> torch.Tensor:
+        """
+        Apply directional ablation (orthogonalization).
+        
+        Removes the component along the feature direction:
+            h' = h - (h·d)·d = h_⊥
+        
+        Note: theta parameter is ignored - ablation always applies 90° rotation.
+        """
+        device = hidden_states.device
+        dtype = hidden_states.dtype
+        
+        cached = self._get_device_tensors(device, dtype)
+        d = cached['b1']  # Feature direction
+        
+        # Compute h·d (projection onto feature direction)
+        h_dot_d = torch.matmul(hidden_states, d)  # Shape: (...,)
+        
+        # Compute h_⊥ = h - (h·d)·d
+        h_parallel = h_dot_d.unsqueeze(-1) * d  # Shape: (..., hidden_dim)
+        
+        return hidden_states - h_parallel
+
+
 def create_operator(
     mode: str,
     b1: torch.Tensor,
@@ -267,7 +389,7 @@ def create_operator(
     Factory function to create the appropriate operator.
     
     Args:
-        mode: Steering mode ("standard", "adaptive", "selective")
+        mode: Steering mode ("standard", "adaptive", "selective", "addition", "ablation")
         b1: First basis vector
         b2: Second basis vector
         threshold: Alignment threshold for adaptive mode
@@ -282,5 +404,10 @@ def create_operator(
         return AdaptiveSteeringOperator(b1, b2, threshold)
     elif mode_enum == SteeringMode.SELECTIVE:
         return SelectiveSteeringOperator(b1, b2, layer_mask)
+    elif mode_enum == SteeringMode.ADDITION:
+        return AdditionSteeringOperator(b1, b2)
+    elif mode_enum == SteeringMode.ABLATION:
+        return AblationSteeringOperator(b1, b2)
     else:
         return StandardSteeringOperator(b1, b2)
+

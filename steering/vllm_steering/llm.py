@@ -82,8 +82,12 @@ class SteeringLLM:
         self._register_hooks()
         
         # Log summary
-        n_layers = len(self._target_layers) if self._target_layers else "auto"
-        logger.info(f"SteeringLLM initialized: mode={mode}, layers={n_layers}")
+        n_hooked = len(self._target_layers) if self._target_layers else "auto"
+        if self._mode == "selective" and self._layer_mask:
+            n_selected = sum(1 for v in self._layer_mask.values() if v)
+            logger.info(f"SteeringLLM initialized: mode={self._mode}, layers={n_selected}/{n_hooked} selected")
+        else:
+            logger.info(f"SteeringLLM initialized: mode={self._mode}, layers={n_hooked}")
     
     @classmethod
     def from_calibration(
@@ -218,6 +222,28 @@ class SteeringLLM:
     def disable_steering(self):
         """Disable steering."""
         self._update_state(enabled=False)
+    
+    def set_operator(self, operator):
+        """
+        Change the steering operator without reloading the model.
+        
+        This allows switching between different steering methods (standard, 
+        adaptive, addition, ablation) at runtime.
+        
+        Args:
+            operator: New steering operator instance
+        """
+        new_operator = operator
+        
+        def update_operator_fn(model: nn.Module):
+            """Update the operator reference in worker process."""
+            import builtins
+            if hasattr(builtins, '_steering_operator'):
+                builtins._steering_operator = new_operator
+            return True
+        
+        self.llm.apply_model(update_operator_fn)
+        logger.info(f"Changed operator to: {type(operator).__name__}")
     
     def generate(
         self,

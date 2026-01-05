@@ -32,8 +32,12 @@ def create_steering_hook(
         Hook function
     """
     _layer_name = layer_name
+    # Store initial operator reference for fallback
+    _initial_operator = operator
     
     def hook(module, input, output):
+        import builtins
+        
         # Read mutable state
         theta = state.get('theta', 0.0)
         enabled = state.get('enabled', True)
@@ -41,10 +45,13 @@ def create_steering_hook(
         if not enabled:
             return output
         
+        # Get current operator - check builtins first for dynamic updates
+        current_operator = getattr(builtins, '_steering_operator', _initial_operator)
+        
         # Clear rotation cache when theta changes to prevent OOM
         last_theta = state.get('last_theta', None)
         if last_theta is not None and last_theta != theta:
-            operator.clear_cache()
+            current_operator.clear_rotation_cache()
         state['last_theta'] = theta
         
         # Handle tuple outputs
@@ -55,8 +62,8 @@ def create_steering_hook(
             hidden_states = output
             rest = None
         
-        # Apply steering
-        steered = operator.steer(hidden_states, theta, _layer_name)
+        # Apply steering using current operator
+        steered = current_operator.steer(hidden_states, theta, _layer_name)
         
         if rest is not None:
             return (steered,) + rest

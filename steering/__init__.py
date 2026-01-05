@@ -9,7 +9,13 @@ from .data import DataManager
 from .extraction import ActivationExtractor
 from .direction import FeatureDirectionCalculator
 from .plane import SteeringPlaneConstructor
-from .steering import AngularSteeringOperator, AdaptiveSteeringOperator, SelectiveSteeringOperator
+from .steering import (
+    AngularSteeringOperator,
+    AdaptiveSteeringOperator,
+    SelectiveSteeringOperator,
+    AdditionSteeringOperator,
+    AblationSteeringOperator,
+)
 from .hooks import ModelHookManager
 from .evaluation import EvaluationSuite
 from .pipeline import AngularSteeringPipeline
@@ -32,6 +38,8 @@ __all__ = [
     "AngularSteeringOperator",
     "AdaptiveSteeringOperator",
     "SelectiveSteeringOperator",
+    "AdditionSteeringOperator",
+    "AblationSteeringOperator",
     "ModelHookManager",
     "EvaluationSuite",
     "AngularSteeringPipeline",

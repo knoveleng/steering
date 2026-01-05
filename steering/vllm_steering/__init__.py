@@ -3,10 +3,12 @@ vLLM Steering Module
 
 Provides vLLM integration for activation steering with high-performance inference.
 
-Supports three steering modes:
+Supports steering modes:
 - standard: Angular rotation on all target layers
 - adaptive: Conditional steering based on alignment threshold  
 - selective: Layer-specific steering based on projection analysis
+- addition: Vector addition steering (special case of angular)
+- ablation: Directional ablation (special case of angular)
 """
 
 from .hooks import create_steering_hook, clear_hooks, get_target_layer_names
@@ -18,6 +20,8 @@ from .operators import (
     StandardSteeringOperator,
     AdaptiveSteeringOperator,
     SelectiveSteeringOperator,
+    AdditionSteeringOperator,
+    AblationSteeringOperator,
     create_operator,
 )
 from .llm import SteeringLLM
@@ -33,6 +37,8 @@ __all__ = [
     "StandardSteeringOperator",
     "AdaptiveSteeringOperator",
     "SelectiveSteeringOperator",
+    "AdditionSteeringOperator",
+    "AblationSteeringOperator",
     "create_operator",
     # Hooks
     "create_steering_hook",
