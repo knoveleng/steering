@@ -21,30 +21,30 @@ import statistics
 DEFAULT_METRICS = {
     "harmbench": "max",
     "llama_guard": "max",
+    "qwen3guard": "max",
+    "polyguard": "max",
+    "llm_judge": "max",
     "substring": "min",
     "compression_ratio": "mean_std",
     "language_consistency": "mean_std",
     "ngram_repetition": "mean_std",
-    "qwen3guard": "max",
-    "polyguard": "max",
-    "llm_judge": "max",
 }
 
 # Display names with arrows (↑ = higher is better, ↓ = lower is better)
 METRIC_DISPLAY_NAMES = {
     "harmbench": "harmbench ↑",
     "llama_guard": "llama_guard ↑",
+    "qwen3guard": "qwen3guard ↑",
+    "polyguard": "polyguard ↑",
+    "llm_judge": "llm_judge ↑",
     "substring": "substring ↓",
     "compression_ratio": "compression_ratio ↑",
     "language_consistency": "language_consistency ↑",
     "ngram_repetition": "ngram_repetition ↓",
-    "qwen3guard": "qwen3guard ↑",
-    "polyguard": "polyguard ↑",
-    "llm_judge": "llm_judge ↑",
 }
 
 # Default methods (subdirectories) - ordered as specified
-DEFAULT_METHODS = ["basic", "adaptive", "selective"]
+DEFAULT_METHODS = ["addition", "ablation", "standard", "adaptive", "selective"]
 
 
 def parse_args() -> argparse.Namespace:

@@ -10,12 +10,8 @@ This script shows how to:
 """
 
 import torch
-import logging
 import argparse
-import os
-import glob
 import time
-from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from steering.pipeline import AngularSteeringPipeline
@@ -23,34 +19,14 @@ from steering.utils import ConfigLoader
 from steering.utils.logger import setup_logger
 
 
-def find_latest_session(artifacts_dir: str, model_name: str = None) -> str:
-    """
-    Find the most recent calibration session directory.
-    
-    Args:
-        artifacts_dir: Base artifacts directory
-        model_name: Optional model name to filter sessions
-        
-    Returns:
-        Path to the latest session directory
-        
-    Raises:
-        FileNotFoundError: If no session directories are found
-    """
-    search_pattern = f"calibration_*" if not model_name else f"calibration_{model_name}_*"
-    session_dirs = glob.glob(os.path.join(artifacts_dir, search_pattern))
-
-    # Sort by modification time to get the latest valid session
-    latest_session = max(session_dirs, key=os.path.getmtime)
-    return latest_session
-
-
 def main():
     """Main function to run the loading and steering example"""
     parser = argparse.ArgumentParser(description="Load and Steer Example Script")
-    parser.add_argument('--session-path', type=str, help='Path to calibration session directory')
-    parser.add_argument('--artifacts-dir', default='artifacts', help='Base artifacts directory')
+    parser.add_argument('--calibration', type=str, required=True, help='Path to calibration session directory')
     parser.add_argument('--config', default='configs/default.yaml', help='Config file')
+    parser.add_argument('--mode', type=str, choices=['standard', 'adaptive', 'selective', 'addition', 'ablation'],
+                        help='Override steering mode from calibration')
+    parser.add_argument('--model-id', type=str, help='Override model ID from config')
     args = parser.parse_args()
 
     # Setup logger
@@ -68,21 +44,13 @@ def main():
         logger.error(f"Error loading configuration: {e}")
         return
 
-    # Find
-    if args.session_path:
-        session_path = args.session_path
-        logger.info(f"Using specified session: {session_path}")
-    else:
-        try:
-            model_name = config['model']['name'].split('/')[-1]
-            session_path = find_latest_session(args.artifacts_dir, model_name)
-            logger.info(f"Found latest session: {session_path}")
-        except FileNotFoundError as e:
-            logger.error(f"Error finding session: {e}")
-            logger.info("Please run calibration.py first to create a session")
-            return
+    # Override model if specified
+    if args.model_id:
+        config['model']['name'] = args.model_id
+        logger.info(f"Model override: {args.model_id}")
 
-    logger.info(f"✓ Session artifacts validated: {session_path}")
+    calibration_path = args.calibration
+    logger.info(f"Using calibration: {calibration_path}")
 
     # Load model and tokenizer
     try:
@@ -108,8 +76,8 @@ def main():
     # Load calibration
     try:
         logger.info("Loading calibration...")
-        pipeline.load_calibration(session_path)
-        logger.info(f"Load successfully from {session_path}")
+        pipeline.load_calibration(calibration_path, mode=args.mode)
+        logger.info(f"Load successfully from {calibration_path}")
 
     except Exception as e:
         logger.error(f"Error loading calibration artifacts: {e}")

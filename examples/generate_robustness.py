@@ -106,7 +106,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-tokens",
         type=int,
-        default=4096,
+        default=1024,
         help="Maximum tokens to generate"
     )
     parser.add_argument(
@@ -146,8 +146,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--gpu-memory-utilization",
         type=float,
-        default=0.8,
+        default=0.85,
         help="GPU memory utilization"
+    )
+    
+    # Override options
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=['standard', 'adaptive', 'selective', 'addition', 'ablation'],
+        help="Override steering mode from calibration"
+    )
+    parser.add_argument(
+        "--model-id",
+        type=str,
+        help="Override model ID from calibration"
     )
     
     return parser.parse_args()
@@ -226,9 +239,19 @@ def generate_with_steering(args: argparse.Namespace) -> None:
     # Load calibration
     logger.info(f"Loading calibration from {args.calibration}...")
     calibration = load_calibration(args.calibration)
+    
+    # Apply overrides
+    if args.model_id:
+        calibration['model_name'] = args.model_id
+        logger.info(f"  Model override: {args.model_id}")
+    if args.mode:
+        calibration['mode'] = args.mode
+        logger.info(f"  Mode override: {args.mode}")
+    
     model_name = calibration['model_name']
+    mode = calibration['mode']
     logger.info(f"  Model: {model_name}")
-    logger.info(f"  Mode: {calibration['mode']}")
+    logger.info(f"  Mode: {mode}")
     
     # Initialize SteeringLLM
     logger.info("Initializing model...")
@@ -238,7 +261,7 @@ def generate_with_steering(args: argparse.Namespace) -> None:
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
         trust_remote_code=True,
-        enforce_eager=True,
+        # enforce_eager=True, # Must be True not to bypass PyTorch forward hooks
         max_model_len=8192,
     )
     load_time = time.time() - start_load

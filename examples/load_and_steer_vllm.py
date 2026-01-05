@@ -40,6 +40,9 @@ Examples:
     parser.add_argument('--data', type=str, default='data/advbench_test.json', help='Path to input data JSON file')
     parser.add_argument('--output-dir', type=str, default=None,
                         help='Output directory for results (default: eval/{model_name})')
+    parser.add_argument('--mode', type=str, choices=['standard', 'adaptive', 'selective', 'addition', 'ablation'],
+                        help='Override steering mode from calibration')
+    parser.add_argument('--model-id', type=str, help='Override model ID from calibration')
     parser.add_argument('--max-tokens', type=int, default=512, help='Max tokens to generate')
     parser.add_argument('--tensor-parallel-size', type=int, default=1, help='Tensor parallel size')
     parser.add_argument('--gpu-memory-utilization', type=float, default=0.8, help='GPU memory utilization')
@@ -47,7 +50,7 @@ Examples:
     parser.add_argument('--no-chat-template', action='store_true', help='Disable chat template formatting')
     parser.add_argument('--degree-start', type=int, default=0, help='Start degree for range')
     parser.add_argument('--degree-end', type=int, default=360, help='End degree for range')
-    parser.add_argument('--degree-step', type=int, default=10, help='Step size for degree range')
+    parser.add_argument('--degree-step', type=int, default=60, help='Step size for degree range')
     return parser.parse_args()
 
 
@@ -141,6 +144,17 @@ def main():
     # Load calibration data
     logger.info("\nLoading calibration...")
     calibration = load_calibration(calibration_path)
+    
+    # Override mode if specified
+    if args.mode:
+        calibration['mode'] = args.mode
+        logger.info(f"  Mode override: {args.mode}")
+    
+    # Override model if specified
+    if args.model_id:
+        calibration['model_name'] = args.model_id
+        logger.info(f"  Model override: {args.model_id}")
+    
     logger.info(f"  Model: {calibration['model_name']}")
     logger.info(f"  Mode: {calibration['mode']}")
     if calibration['target_layers']:
@@ -154,7 +168,7 @@ def main():
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
         trust_remote_code=True,
-        enforce_eager=True,
+        enforce_eager=True, # Must be True not to bypass PyTorch forward hooks
         max_model_len=4096,
     )
     load_time = time.time() - start_load

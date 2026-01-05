@@ -92,6 +92,19 @@ def parse_args():
         help="Device map for model loading (default: auto)"
     )
     
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["standard", "adaptive", "selective", "addition", "ablation"],
+        help="Override steering mode from calibration"
+    )
+    
+    parser.add_argument(
+        "--model-id",
+        type=str,
+        help="Override model ID from config"
+    )
+    
     return parser.parse_args()
 
 
@@ -143,6 +156,11 @@ def main():
     with open(Path(args.calibration) / "config.json", "r") as f:
         config = json.load(f)
     
+    # Override model if specified
+    if args.model_id:
+        config['model']['name'] = args.model_id
+        print(f"Model override: {args.model_id}")
+    
     print(f"Loading model: {config['model']['name']}")
     model = AutoModelForCausalLM.from_pretrained(
         config['model']['name'], 
@@ -157,7 +175,7 @@ def main():
     
     # Load pre-calibrated steering plane
     print(f"Loading calibration from {args.calibration}")
-    pipeline.load_calibration(args.calibration)
+    pipeline.load_calibration(args.calibration, mode=args.mode)
     
     # Load dataset
     print(f"Loading data from {args.data}")

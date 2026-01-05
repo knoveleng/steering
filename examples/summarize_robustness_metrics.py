@@ -18,7 +18,11 @@ import statistics
 
 
 # Default methods (subdirectories) - ordered as specified
-DEFAULT_METHODS = ["basic", "adaptive", "selective"]
+# "baseline" is a special method that uses data from the first available source
+DEFAULT_METHODS = ["baseline", "addition", "ablation", "standard", "adaptive", "selective"]
+
+# Source methods to check for baseline data (in order of preference)
+BASELINE_SOURCE_METHODS = ["selective", "standard", "adaptive", "ablation", "addition"]
 
 # Default benchmarks
 DEFAULT_BENCHMARKS = ["tinyAI2_arc", "tinyGSM8k", "tinyMMLU", "tinyTruthfulQA", "tinyWinogrande"]
@@ -110,6 +114,49 @@ def load_accuracy_scores(benchmark_dir: Path) -> List[float]:
     return scores
 
 
+def load_accuracy_at_degree(benchmark_dir: Path, target_degree: int) -> List[float]:
+    """
+    Load accuracy scores only from JSON files matching the target degree.
+    
+    Args:
+        benchmark_dir: Path to the benchmark folder containing JSON files
+        target_degree: Target degree to load (e.g., 0 for baseline)
+        
+    Returns:
+        List of accuracy scores at the specified degree
+    """
+    import re
+    scores = []
+    
+    if not benchmark_dir.exists():
+        return scores
+    
+    for json_file in sorted(benchmark_dir.glob("*.json")):
+        # Extract degree from filename
+        match = re.search(r'results_degree_(\d+)', json_file.name)
+        if not match:
+            continue
+        
+        degree = int(match.group(1))
+        if degree != target_degree:
+            continue
+        
+        try:
+            with open(json_file, "r") as f:
+                data = json.load(f)
+            
+            metadata = data.get("metadata", {})
+            if "accuracy" in metadata:
+                score = metadata["accuracy"]
+                if score is not None:
+                    scores.append(float(score))
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            print(f"Warning: Error reading {json_file}: {e}", file=sys.stderr)
+            continue
+    
+    return scores
+
+
 def aggregate_scores(scores: List[float]) -> str:
     """
     Aggregate scores using mean and standard deviation.
@@ -144,8 +191,37 @@ def collect_metrics(input_dir: Path, methods: List[str], benchmarks: List[str]) 
         Dictionary mapping (method, model) -> {benchmark: aggregated_value}
     """
     results = {}
+    baseline_models_processed = set()  # Track which models have baseline data
     
     for method in methods:
+        # Handle baseline specially - use data from the first available source method
+        if method == "baseline":
+            for source_method in BASELINE_SOURCE_METHODS:
+                source_dir = input_dir / source_method
+                if not source_dir.exists():
+                    continue
+                
+                model_dirs = [d for d in source_dir.iterdir() if d.is_dir()]
+                
+                for model_dir in sorted(model_dirs):
+                    model_name = model_dir.name
+                    
+                    # Skip if already processed this model's baseline
+                    if model_name in baseline_models_processed:
+                        continue
+                    
+                    key = ("baseline", model_name)
+                    results[key] = {}
+                    
+                    for benchmark in benchmarks:
+                        benchmark_dir = model_dir / benchmark
+                        # Load only 0° data for baseline (no std deviation)
+                        scores = load_accuracy_at_degree(benchmark_dir, 0)
+                        results[key][benchmark] = aggregate_scores(scores)
+                    
+                    baseline_models_processed.add(model_name)
+            continue
+        
         method_dir = input_dir / method
         if not method_dir.exists():
             print(f"Warning: Method directory not found: {method_dir}", file=sys.stderr)
