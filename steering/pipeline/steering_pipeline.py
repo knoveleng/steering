@@ -13,7 +13,7 @@ from ..data import DataManager
 from ..extraction import ActivationExtractor
 from ..direction import FeatureDirectionCalculator
 from ..plane import SteeringPlaneConstructor
-from ..steering import AngularSteeringOperator, AdaptiveSteeringOperator, SelectiveSteeringOperator
+from ..steering import AngularSteeringOperator, AdaptiveSteeringOperator, SelectiveSteeringOperator, AdditionSteeringOperator, AblationSteeringOperator
 from ..hooks import ModelHookManager
 from ..artifacts import ArtifactsManager, ActivationAnalyzer
 from ..utils.logger import setup_logger
@@ -274,6 +274,16 @@ class AngularSteeringPipeline:
                 self.feature_direction
             )
             self._layer_steering_mask = self.steering_operator.layer_steering_mask
+        elif mode == 'addition':
+            self.steering_operator = AdditionSteeringOperator(
+                b1, b2,
+                cache_rotations=True
+            )
+        elif mode == 'ablation':
+            self.steering_operator = AblationSteeringOperator(
+                b1, b2,
+                cache_rotations=True
+            )
         else:
             self.steering_operator = AngularSteeringOperator(
                 b1, b2,
@@ -608,7 +618,14 @@ class AngularSteeringPipeline:
 
             # Get layer steering mask if in selective mode
             mode = self.config.get('steering', {}).get('mode', 'standard')
-            extra_info = {}
+            
+            # Always store target layers for consistency across all modes
+            target_layers = self._get_target_layers()
+            extra_info = {
+                'target_layers': target_layers,  # Store for ALL modes
+            }
+            
+            # Add layer_steering_mask for selective mode
             if mode == 'selective' and hasattr(self.steering_operator, 'layer_steering_mask'):
                 extra_info['layer_steering_mask'] = self.steering_operator.layer_steering_mask
 
@@ -669,9 +686,14 @@ class AngularSteeringPipeline:
         self.save_calibration_session(save_artifacts, run_analysis)
         self.logger.info(f"Calibration saved to {str(self.artifacts.session_dir)}")
 
-    def load_calibration(self, bundle_dir: str) -> None:
+    def load_calibration(self, bundle_dir: str, mode: str = None) -> None:
         """
         Load complete calibration bundle
+        
+        Args:
+            bundle_dir: Path to calibration directory
+            mode: Optional mode override (standard, adaptive, selective).
+                  If provided, overrides the mode saved in calibration config.
         """
         bundle = self.artifacts.load_calibration(bundle_dir)
 
@@ -711,9 +733,12 @@ class AngularSteeringPipeline:
                 f"but got b1.shape={b1.shape}, b2.shape={b2.shape}"
             )
 
-        # Use mode from saved config, not current config
+        # Use mode from parameter if provided, otherwise from saved config
         saved_config = bundle.get('config', {})
-        mode = saved_config.get('steering', {}).get('mode', 'standard')
+        if mode is not None:
+            self.logger.info(f"Using mode override: {mode}")
+        else:
+            mode = saved_config.get('steering', {}).get('mode', 'standard')
 
         self.logger.info(f"Loading calibration with mode: {mode}")
 
@@ -758,6 +783,10 @@ class AngularSteeringPipeline:
                 n_selected = sum(layer_steering_mask.values())
                 n_total = len(layer_steering_mask)
                 self.logger.info(f"  ✓ Loaded selective steering with {n_selected}/{n_total} layers selected")
+        elif mode == 'addition':
+            self.steering_operator = AdditionSteeringOperator(b1, b2, cache_rotations=True)
+        elif mode == 'ablation':
+            self.steering_operator = AblationSteeringOperator(b1, b2, cache_rotations=True)
         else:
             self.steering_operator = AngularSteeringOperator(b1, b2, cache_rotations=True)
 
