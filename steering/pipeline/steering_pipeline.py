@@ -649,6 +649,10 @@ class AngularSteeringPipeline:
             if any(x is None for x in [harmful_acts, harmless_acts, candidates, b1, b2]):
                 raise RuntimeError("Calibration data not available for analysis")
 
+            # Use session-based directory to avoid overwrites when running multiple calibrations
+            analysis_session_name = f"analysis_{model_name}_{self.artifacts.session_id}"
+            self.analyzer.set_session_output_dir(analysis_session_name)
+
             self.analyzer.analyze_all(
                 harmful_acts, harmless_acts, candidates,
                 self.feature_direction, (b1, b2), model_name

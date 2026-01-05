@@ -29,6 +29,20 @@ class ActivationAnalyzer:
 
         self.stats = {}
     
+    def set_session_output_dir(self, session_name: str) -> None:
+        """
+        Set output directory to a session-specific subdirectory.
+        
+        This ensures analysis files don't overwrite each other when running
+        multiple calibrations for the same model.
+        
+        Args:
+            session_name: Unique session identifier (e.g., 'analysis_model_timestamp')
+        """
+        self.output_dir = self.output_dir / session_name
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.logger.info(f"Analysis output directory set to: {self.output_dir}")
+    
     def plot_activation_norms(
         self,
         harmful_acts: Dict[str, torch.Tensor],
@@ -108,9 +122,10 @@ class ActivationAnalyzer:
 
         # Update layout
         fig.update_layout(
-            title=dict(text='Activation Norms Across Layers', font=dict(size=16)),
-            xaxis=dict(title='Extraction Point', showgrid=True, gridcolor='lightgray'),
-            yaxis=dict(title='Activation Norm', showgrid=True, gridcolor='lightgray'),
+            title=dict(text='Activation Norms Across Layers', font=dict(size=28)),
+            xaxis=dict(title=dict(text='Extraction Point', font=dict(size=22)), showgrid=True, gridcolor='lightgray', tickfont=dict(size=18)),
+            yaxis=dict(title=dict(text='Activation Norm', font=dict(size=22)), showgrid=True, gridcolor='lightgray', tickfont=dict(size=18)),
+            legend=dict(font=dict(size=20)),
             showlegend=True,
             width=900,
             height=500,
@@ -118,8 +133,8 @@ class ActivationAnalyzer:
         )
 
         if save_name:
-            fig.write_image(self.output_dir / f'activation_norms_{save_name}.png', format='png')
-            self.logger.info(f"  ✓ activation_norms_{save_name}.png")
+            fig.write_image(self.output_dir / f'activation_norms_{save_name}.pdf')
+            self.logger.info(f"  ✓ activation_norms_{save_name}.pdf")
 
         # Store original values for compatibility
         harmful_norms = harmful_means
@@ -221,9 +236,10 @@ class ActivationAnalyzer:
 
         # Update layout
         fig.update_layout(
-            title=dict(text='Projections on Local Candidate Directions', font=dict(size=16)),
-            xaxis=dict(title='Layer Index', showgrid=True, gridcolor='lightgray'),
-            yaxis=dict(title='Scalar Projection', showgrid=True, gridcolor='lightgray'),
+            title=dict(text='Projections on Local Candidate Directions', font=dict(size=28)),
+            xaxis=dict(title=dict(text='Layer Index', font=dict(size=22)), showgrid=True, gridcolor='lightgray', tickfont=dict(size=18)),
+            yaxis=dict(title=dict(text='Scalar Projection', font=dict(size=22)), showgrid=True, gridcolor='lightgray', tickfont=dict(size=18)),
+            legend=dict(font=dict(size=20)),
             showlegend=True,
             width=900,
             height=500,
@@ -231,8 +247,8 @@ class ActivationAnalyzer:
         )
 
         if save_name:
-            fig.write_image(self.output_dir / f'projections_local_{save_name}.png', format='png')
-            self.logger.info(f"  ✓ projections_local_{save_name}.png")
+            fig.write_image(self.output_dir / f'projections_local_{save_name}.pdf')
+            self.logger.info(f"  ✓ projections_local_{save_name}.pdf")
 
         # Store original values for compatibility
         harmful_projs = harmful_proj_means
@@ -306,19 +322,19 @@ class ActivationAnalyzer:
 
         # Update layout
         fig.update_layout(
-            title=dict(text='Candidate Direction Analysis', font=dict(size=16)),
+            title=dict(text='Candidate Direction Analysis', font=dict(size=28)),
             width=1000, height=500, template='plotly_white',
             showlegend=False
         )
 
-        fig.update_xaxes(title_text='Layer Index', row=1, col=1)
-        fig.update_yaxes(title_text='Direction Norm', row=1, col=1)
-        fig.update_xaxes(title_text='Layer Index', row=1, col=2)
-        fig.update_yaxes(title_text='Mean Cosine Similarity', row=1, col=2)
+        fig.update_xaxes(title_text='Layer Index', title_font=dict(size=22), tickfont=dict(size=18), row=1, col=1)
+        fig.update_yaxes(title_text='Direction Norm', title_font=dict(size=22), tickfont=dict(size=18), row=1, col=1)
+        fig.update_xaxes(title_text='Layer Index', title_font=dict(size=22), tickfont=dict(size=18), row=1, col=2)
+        fig.update_yaxes(title_text='Mean Cosine Similarity', title_font=dict(size=22), tickfont=dict(size=18), row=1, col=2)
 
         if save_name:
-            fig.write_image(self.output_dir / f'direction_statistics_{save_name}.png', format='png')
-            self.logger.info(f"  ✓ direction_statistics_{save_name}.png")
+            fig.write_image(self.output_dir / f'direction_statistics_{save_name}.pdf')
+            self.logger.info(f"  ✓ direction_statistics_{save_name}.pdf")
         
         stats = {
             'norms': norms,
@@ -406,7 +422,7 @@ class ActivationAnalyzer:
             line=dict(color='blue', width=3),
             text=['', 'b₁'],
             textposition='middle right',
-            textfont=dict(color='blue', size=14),
+            textfont=dict(color='blue', size=24),
             showlegend=False,
             name='Basis b₁'
         ))
@@ -417,7 +433,7 @@ class ActivationAnalyzer:
             line=dict(color='green', width=3),
             text=['', 'b₂'],
             textposition='top center',
-            textfont=dict(color='green', size=14),
+            textfont=dict(color='green', size=24),
             showlegend=False,
             name='Basis b₂'
         ))
@@ -428,9 +444,10 @@ class ActivationAnalyzer:
 
         # Update layout
         fig.update_layout(
-            title=dict(text='Steering Plane Evolution', font=dict(size=16)),
-            xaxis=dict(title='Projection on b₁', showgrid=True, gridcolor='lightgray', scaleanchor="y", scaleratio=1),
-            yaxis=dict(title='Projection on b₂', showgrid=True, gridcolor='lightgray'),
+            title=dict(text='Steering Plane Evolution', font=dict(size=28)),
+            xaxis=dict(title=dict(text='Projection on b₁', font=dict(size=22)), showgrid=True, gridcolor='lightgray', scaleanchor="y", scaleratio=1, tickfont=dict(size=18)),
+            yaxis=dict(title=dict(text='Projection on b₂', font=dict(size=22)), showgrid=True, gridcolor='lightgray', tickfont=dict(size=18)),
+            legend=dict(font=dict(size=20)),
             showlegend=True,
             width=700,
             height=700,
@@ -438,8 +455,8 @@ class ActivationAnalyzer:
         )
 
         if save_name:
-            fig.write_image(self.output_dir / f'plane_evolution_{save_name}.png', format='png')
-            self.logger.info(f"  ✓ plane_evolution_{save_name}.png")
+            fig.write_image(self.output_dir / f'plane_evolution_{save_name}.pdf')
+            self.logger.info(f"  ✓ plane_evolution_{save_name}.pdf")
         
         stats = {
             'projections': projections,
@@ -534,9 +551,10 @@ class ActivationAnalyzer:
 
         # Update layout
         fig.update_layout(
-            title=dict(text='Alignment with Selected Feature Direction', font=dict(size=16)),
-            xaxis=dict(title='Layer Index', showgrid=True, gridcolor='lightgray'),
-            yaxis=dict(title='Scalar Projection', showgrid=True, gridcolor='lightgray'),
+            title=dict(text='Alignment with Selected Feature Direction', font=dict(size=28)),
+            xaxis=dict(title=dict(text='Layer Index', font=dict(size=22)), showgrid=True, gridcolor='lightgray', tickfont=dict(size=18)),
+            yaxis=dict(title=dict(text='Scalar Projection', font=dict(size=22)), showgrid=True, gridcolor='lightgray', tickfont=dict(size=18)),
+            legend=dict(font=dict(size=20)),
             showlegend=True,
             width=900,
             height=500,
@@ -544,8 +562,8 @@ class ActivationAnalyzer:
         )
 
         if save_name:
-            fig.write_image(self.output_dir / f'feature_alignment_{save_name}.png', format='png')
-            self.logger.info(f"  ✓ feature_alignment_{save_name}.png")
+            fig.write_image(self.output_dir / f'feature_alignment_{save_name}.pdf')
+            self.logger.info(f"  ✓ feature_alignment_{save_name}.pdf")
 
         # Store original values for compatibility
         harmful_projs = harmful_proj_means
@@ -599,17 +617,17 @@ class ActivationAnalyzer:
 
         # Update layout
         fig.update_layout(
-            title=dict(text='Direction Similarity Matrix', font=dict(size=16)),
-            xaxis=dict(title='Layer Index'),
-            yaxis=dict(title='Layer Index'),
+            title=dict(text='Direction Similarity Matrix', font=dict(size=28)),
+            xaxis=dict(title=dict(text='Layer Index', font=dict(size=22)), tickfont=dict(size=18)),
+            yaxis=dict(title=dict(text='Layer Index', font=dict(size=22)), tickfont=dict(size=18)),
             width=600,
             height=600,
             template='plotly_white'
         )
 
         if save_name:
-            fig.write_image(self.output_dir / f'similarity_matrix_{save_name}.png', format='png')
-            self.logger.info(f"  ✓ similarity_matrix_{save_name}.png")
+            fig.write_image(self.output_dir / f'similarity_matrix_{save_name}.pdf')
+            self.logger.info(f"  ✓ similarity_matrix_{save_name}.pdf")
         
         stats = {
             'similarity_matrix': sim_matrix.numpy().tolist(),
@@ -821,7 +839,7 @@ class ActivationAnalyzer:
             line=dict(color='blue', width=3),
             text=['', 'b₁'],
             textposition='middle right',
-            textfont=dict(color='blue', size=14),
+            textfont=dict(color='blue', size=24),
             showlegend=False,
             name='Basis b₁',
             hoverinfo='skip'
@@ -834,7 +852,7 @@ class ActivationAnalyzer:
             line=dict(color='green', width=3),
             text=['', 'b₂'],
             textposition='top center',
-            textfont=dict(color='green', size=14),
+            textfont=dict(color='green', size=24),
             showlegend=False,
             name='Basis b₂',
             hoverinfo='skip'
@@ -848,24 +866,27 @@ class ActivationAnalyzer:
         fig.update_layout(
             title=dict(
                 text='Mean Activations on Steering Plane (All Layers)',
-                font=dict(size=16)
+                font=dict(size=28)
             ),
             xaxis=dict(
-                title='Basis Vector b₁',
+                title=dict(text='Basis Vector b₁', font=dict(size=22)),
                 showgrid=True,
                 gridcolor='lightgray',
                 zeroline=True,
                 zerolinewidth=1,
-                zerolinecolor='gray'
+                zerolinecolor='gray',
+                tickfont=dict(size=18)
             ),
             yaxis=dict(
-                title='Basis Vector b₂',
+                title=dict(text='Basis Vector b₂', font=dict(size=22)),
                 showgrid=True,
                 gridcolor='lightgray',
                 zeroline=True,
                 zerolinewidth=1,
-                zerolinecolor='gray'
+                zerolinecolor='gray',
+                tickfont=dict(size=18)
             ),
+            legend=dict(font=dict(size=20)),
             showlegend=True,
             width=1000,
             height=800,
@@ -877,10 +898,10 @@ class ActivationAnalyzer:
         fig.update_yaxes(scaleanchor="x", scaleratio=1)
         
         if save_name:
-            fig.write_image(self.output_dir / f'steering_plane_{save_name}.png', format='png')
+            fig.write_image(self.output_dir / f'steering_plane_{save_name}.pdf')
             
             if hasattr(self, 'logger'):
-                self.logger.info(f"  ✓ steering_plane_{save_name}.png")
+                self.logger.info(f"  ✓ steering_plane_{save_name}.pdf")
         
         # Compute statistics
         separation_distance = np.sqrt((pos_centroid_x - neg_centroid_x)**2 + 
@@ -1101,10 +1122,10 @@ class ActivationAnalyzer:
         ), row=2, col=1)
 
         # Update axes
-        fig.update_xaxes(title_text='Layer Index', row=1, col=1, showgrid=True, gridcolor='lightgray')
-        fig.update_yaxes(title_text='Mean Projection', row=1, col=1, showgrid=True, gridcolor='lightgray')
-        fig.update_xaxes(title_text='Layer Index', row=2, col=1, showgrid=True, gridcolor='lightgray')
-        fig.update_yaxes(title_text='|Pos Mean - Neg Mean|', row=2, col=1, showgrid=True, gridcolor='lightgray')
+        fig.update_xaxes(title_text='Layer Index', title_font=dict(size=22), tickfont=dict(size=18), row=1, col=1, showgrid=True, gridcolor='lightgray')
+        fig.update_yaxes(title_text='Mean Projection', title_font=dict(size=22), tickfont=dict(size=18), row=1, col=1, showgrid=True, gridcolor='lightgray')
+        fig.update_xaxes(title_text='Layer Index', title_font=dict(size=22), tickfont=dict(size=18), row=2, col=1, showgrid=True, gridcolor='lightgray')
+        fig.update_yaxes(title_text='|Pos Mean - Neg Mean|', title_font=dict(size=22), tickfont=dict(size=18), row=2, col=1, showgrid=True, gridcolor='lightgray')
 
         # Check if selection is contiguous range
         selected_indices = [i for i, s in enumerate(selected) if s]
@@ -1124,7 +1145,7 @@ class ActivationAnalyzer:
         fig.update_layout(
             title=dict(
                 text=title_text,
-                font=dict(size=16)
+                font=dict(size=28)
             ),
             showlegend=True,
             width=1000,
@@ -1134,8 +1155,8 @@ class ActivationAnalyzer:
         )
 
         if save_name:
-            fig.write_image(self.output_dir / f'selective_steering_{save_name}.png', format='png')
-            self.logger.info(f"  ✓ selective_steering_{save_name}.png")
+            fig.write_image(self.output_dir / f'selective_steering_{save_name}.pdf')
+            self.logger.info(f"  ✓ selective_steering_{save_name}.pdf")
 
         # Compute statistics
         n_selected = sum(selected)
