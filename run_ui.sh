@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Run Streamlit UI for Angular Steering
+# Run Streamlit UI for Selective Steering
 
-echo "Starting Angular Steering Chat UI..."
+echo "Starting Selective Steering Chat UI..."
 echo "=================================="
 
 # Check if streamlit is installed

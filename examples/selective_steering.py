@@ -1,5 +1,5 @@
 """
-Complete Angular Steering with artifacts, analysis, and transformers backend
+Complete Selective Steering with artifacts, analysis, and transformers backend
 """
 
 import torch
@@ -13,7 +13,7 @@ from steering.utils.logger import setup_logger
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Angular Steering Pipeline")
+    parser = argparse.ArgumentParser(description="Selective Steering Pipeline")
     parser.add_argument('--config', default='configs/selective.yaml', help='Config file')
     parser.add_argument('--use-chat-template', action='store_true',
                        help='Enable chat template')
@@ -38,7 +38,7 @@ def main():
             config['chat_template']['system_prompt'] = args.system_prompt
 
     logger.info("="*60)
-    logger.info("Angular Steering - Transformers Backend")
+    logger.info("Selective Steering - Transformers Backend")
     logger.info("="*60)
     logger.info(f"Model: {config['model']['name']}")
     logger.info(f"Chat Template: {config.get('chat_template', {}).get('enabled', False)}")

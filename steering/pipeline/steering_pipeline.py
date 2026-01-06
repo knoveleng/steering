@@ -1,5 +1,5 @@
 """
-Complete Angular Steering Pipeline
+Complete Selective Steering Pipeline
 """
 
 import torch
@@ -21,7 +21,7 @@ from ..utils.logger import setup_logger
 
 class AngularSteeringPipeline:
     """
-    Complete pipeline for Angular Steering
+    Complete pipeline for Selective Steering
     """
 
     def __init__(
@@ -120,7 +120,7 @@ class AngularSteeringPipeline:
             Dictionary with calibration info
         """
         self.logger.info("=" * 60)
-        self.logger.info("Starting Angular Steering Calibration")
+        self.logger.info("Starting Selective Steering Calibration")
         self.logger.info("=" * 60)
 
         # Use paths from config if not provided

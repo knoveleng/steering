@@ -11,7 +11,7 @@ setup(
     version="0.1.0",
     author="Knovel Engineering Lab",
     author_email="quyanh.dang@knoveleng.com",
-    description="Angular Steering for Large Language Models",
+    description="Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/yourusername/angular-steering",

@@ -1,5 +1,5 @@
 """
-Streamlit Chat UI for Angular Steering
+Streamlit Chat UI for Selective Steering
 """
 
 import streamlit as st
@@ -22,7 +22,7 @@ from utils.session import SessionManager
 
 # Page config
 st.set_page_config(
-    page_title="Angular Steering Chat",
+    page_title="Selective Steering Chat",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -162,7 +162,7 @@ def main():
     initialize_session_state()
     
     # Header
-    st.markdown('<div class="main-header">🎯 Angular Steering Chat</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">🎯 Selective Steering Chat</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">Interactive chat with controllable AI behavior</div>', unsafe_allow_html=True)
     
     # Sidebar
@@ -183,9 +183,9 @@ def main():
             4. **Adjust Steering**: Use the theta slider or type a value to control behavior
             5. **Start Chatting**: Type your message and see the steered output!
             
-            ### What is Angular Steering?
+            ### What is Selective Steering?
             
-            Angular steering allows you to control AI behavior by rotating activations in a learned 2D plane:
+            Selective Steering allows you to control AI behavior by rotating activations in a learned 2D plane:
             - **θ = 0°**: Original model behavior
             - **θ = 100-200°**: Increased refusal/safety
             - **θ = 300°**: Maximum steering effect

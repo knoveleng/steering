@@ -11,7 +11,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Run angular steering experiments with configurable parameters"
+        description="Run Selective Steering experiments with configurable parameters"
     )
     
     parser.add_argument(

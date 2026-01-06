@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Example: Grassmannian Plane Optimization for Angular Steering
+Example: Grassmannian Plane Optimization for Selective Steering
 
 This script demonstrates:
 1. Using Grassmannian optimization for optimal steering plane
@@ -76,7 +76,7 @@ def main():
     logger = setup_logger("steering.example.grassmannian")
 
     logger.info("="*70)
-    logger.info("Grassmannian Plane Optimization for Angular Steering")
+    logger.info("Grassmannian Plane Optimization for Selective Steering")
     logger.info("="*70)
 
     # Load config

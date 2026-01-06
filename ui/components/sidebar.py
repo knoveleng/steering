@@ -129,7 +129,7 @@ def render_sidebar():
         # Info section
         with st.expander("ℹ️ About"):
             st.markdown("""
-            **Angular Steering** allows fine-grained control over model behavior
+            **Selective Steering** allows fine-grained control over model behavior
             by rotating activations in a 2D plane learned from harmful/harmless examples.
             
             **Developed by:** Your Team

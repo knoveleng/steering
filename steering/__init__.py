@@ -1,7 +1,7 @@
 """
-Angular Steering Core Package
+Selective Steering Core Package
 
-This package contains the core components for implementing Angular Steering
+This package contains the core components for implementing Selective Steering
 for Large Language Models.
 """
 

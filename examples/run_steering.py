@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Unified Angular Steering Script
+Unified Selective Steering Script
 
 Supports all steering modes (standard, adaptive, selective) with a single script.
 Mode can be overridden via command line argument.
@@ -23,7 +23,7 @@ from steering.utils.logger import setup_logger
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Unified Angular Steering Pipeline",
+        description="Unified Selective Steering Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -87,7 +87,7 @@ Examples:
     mode = config.get('steering', {}).get('mode', 'standard')
 
     logger.info("=" * 60)
-    logger.info("Angular Steering - Unified Script")
+    logger.info("Selective Steering - Unified Script")
     logger.info("=" * 60)
     logger.info(f"Config: {args.config}")
     logger.info(f"Model: {config['model']['name']}")
