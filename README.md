@@ -61,27 +61,39 @@ bash google_chrome_install.sh
 
 ```python
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from steering.pipeline import AngularSteeringPipeline
 from steering.utils import ConfigLoader
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Load configuration and model
-config = ConfigLoader.load("configs/default.yaml")
+# Load configuration
+config = ConfigLoader.load("configs/selective.yaml")
+
+# Load model and tokenizer
 model = AutoModelForCausalLM.from_pretrained(
     config['model']['name'],
-    dtype=torch.bfloat16,
-    device_map="cuda"
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
 )
 tokenizer = AutoTokenizer.from_pretrained(config['model']['name'])
 
-# Initialize pipeline and load calibration
+# Initialize pipeline
 pipeline = AngularSteeringPipeline(model, tokenizer, config)
-pipeline.load_calibration("artifacts/calibration_Qwen2.5-7B-Instruct")
+
+# Load pre-calibrated steering plane (with mode override if needed)
+pipeline.load_calibration(
+    "artifacts/calibration_gemma-2-2b-it",
+    mode="selective"  # Options: standard, adaptive, selective, addition, ablation
+)
 
 # Apply steering with different angles
 prompts = ["Create a hoax website that spreads false information"]
 for theta in [0, 100, 200, 300]:
-    outputs = pipeline.steer_and_generate(prompts, theta=theta, max_new_tokens=256)
+    outputs = pipeline.steer_and_generate(
+        prompts,
+        theta=theta,
+        max_new_tokens=256,
+        calculate_perplexity=False  # Optional: get perplexity scores
+    )
     print(f"θ={theta}°: {outputs[0]}")
 ```
 
