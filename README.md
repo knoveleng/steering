@@ -40,7 +40,7 @@ Selective Steering provides a principled approach to behavior modification in LL
 ## Installation
 
 ```bash
-git clone https://github.com/QuyAnh2005/steering.git
+git clone https://github.com/anonymous/steering.git
 cd steering
 pip install -e .
 ```

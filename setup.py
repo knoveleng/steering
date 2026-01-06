@@ -9,12 +9,12 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 setup(
     name="steering",
     version="0.1.0",
-    author="Knovel Engineering Lab",
-    author_email="quyanh.dang@knoveleng.com",
+    author="anonymous",
+    author_email="anonymous",
     description="Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/angular-steering",
+    url="https://github.com/anonymous/steering",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
