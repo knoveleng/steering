@@ -19,7 +19,7 @@ from typing import List, Dict, Any, Optional, Union
 
 from vllm import SamplingParams
 from steering import SteeringLLM
-from ui.utils import load_calibration
+from steering.utils import load_calibration
 from steering.utils.logger import setup_logger
 
 # Enable insecure serialization for vLLM v0.12+

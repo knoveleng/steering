@@ -230,7 +230,7 @@ def format_prompts_with_chat_template(
 
 def generate_with_steering(args: argparse.Namespace) -> None:
     """Generate responses using SteeringLLM."""
-    from ui.utils import load_calibration
+    from steering.utils import load_calibration
     
     logger.info("=" * 60)
     logger.info("Generate Robustness with Steering")
