@@ -13,7 +13,7 @@ Selective Steering provides a principled approach to behavior modification in LL
 - Applying controlled angular rotations to steer model behavior
 - Maintaining model coherence while achieving targeted modifications
 
-[demo.webm](https://github.com/user-attachments/assets/02e95790-79d6-47dd-b82b-a72677adbc6c)
+[demo.webm](https://github.com/user-attachments/assets/86c02645-111f-40ff-a870-f99bafc996ac)
 
 ## Features
 
