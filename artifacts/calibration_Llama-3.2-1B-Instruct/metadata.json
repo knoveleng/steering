@@ -1,0 +1,9 @@
+{
+  "session_id": "20251218_100600",
+  "selected_layer": "model.layers.12.input_layernorm",
+  "plane_type": "selective",
+  "n_layers": 32,
+  "harmful_samples": 416,
+  "harmless_samples": 416,
+  "hidden_dim": 2048
+}

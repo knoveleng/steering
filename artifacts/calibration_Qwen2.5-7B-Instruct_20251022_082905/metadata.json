@@ -1,9 +1,0 @@
-{
-  "session_id": "20251022_082905",
-  "selected_layer": "model.layers.21.post_attention_layernorm",
-  "plane_type": "adaptive",
-  "n_layers": 56,
-  "harmful_samples": 416,
-  "harmless_samples": 416,
-  "hidden_dim": 3584
-}

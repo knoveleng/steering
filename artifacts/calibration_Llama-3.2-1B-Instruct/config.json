@@ -1,24 +1,19 @@
 {
   "model": {
-    "name": "Qwen/Qwen2.5-7B-Instruct",
+    "name": "meta-llama/Llama-3.2-1B-Instruct",
     "device": "cuda",
     "dtype": "bfloat16"
   },
   "generation": {
-    "max_length": 256,
+    "max_length": 512,
     "temperature": 0.0,
     "top_p": 0.9,
-    "do_sample": true
+    "do_sample": false
   },
   "chat_template": {
     "enabled": true,
     "system_prompt": null,
     "add_generation_prompt": true
-  },
-  "vllm": {
-    "tensor_parallel_size": 1,
-    "gpu_memory_utilization": 0.9,
-    "max_model_len": 2048
   },
   "data": {
     "harmful_dataset": "data/advbench.json",
@@ -30,23 +25,13 @@
     "method": "diff_in_means"
   },
   "steering": {
-    "mode": "standard",
+    "mode": "selective",
     "threshold": 0.0,
     "cache_rotations": true
   },
   "layers": {
     "extraction_layers": null,
     "target_layers": null
-  },
-  "evaluation": {
-    "theta_range": {
-      "start": 0,
-      "end": 360,
-      "step": 10
-    },
-    "metrics": [
-      "refusal_score"
-    ]
   },
   "artifacts_dir": "artifacts",
   "analysis_dir": "analysis",

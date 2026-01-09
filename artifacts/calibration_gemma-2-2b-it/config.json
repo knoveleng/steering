@@ -1,0 +1,40 @@
+{
+  "model": {
+    "name": "google/gemma-2-2b-it",
+    "device": "cuda",
+    "dtype": "bfloat16"
+  },
+  "generation": {
+    "max_length": 512,
+    "temperature": 0.0,
+    "top_p": 0.9,
+    "do_sample": false
+  },
+  "chat_template": {
+    "enabled": true,
+    "system_prompt": null,
+    "add_generation_prompt": true
+  },
+  "data": {
+    "harmful_dataset": "data/advbench.json",
+    "harmless_dataset": "data/alpaca.json",
+    "harmful_samples": 416,
+    "harmless_samples": 512
+  },
+  "direction": {
+    "method": "diff_in_means"
+  },
+  "steering": {
+    "mode": "selective",
+    "threshold": 0.0,
+    "cache_rotations": true
+  },
+  "layers": {
+    "extraction_layers": null,
+    "target_layers": null
+  },
+  "artifacts_dir": "artifacts",
+  "analysis_dir": "analysis",
+  "save_artifacts": true,
+  "run_analysis": true
+}
