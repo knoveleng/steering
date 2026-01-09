@@ -1,13 +1,52 @@
 """
-Chat interface component
+Chat interface component for Selective Steering UI
 """
 
 import streamlit as st
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from vllm import SamplingParams
 
 
-def render_chat_interface(pipeline, settings: Dict[str, Any]):
+def format_prompt_with_chat_template(
+    prompt: str,
+    tokenizer,
+    system_prompt: Optional[str] = None,
+    use_chat_template: bool = True
+) -> str:
+    """Format a prompt using the tokenizer's chat template."""
+    if not use_chat_template:
+        if system_prompt:
+            return f"{system_prompt}\n\n{prompt}"
+        return prompt
+    
+    # Check if tokenizer has chat template
+    if not hasattr(tokenizer, 'apply_chat_template') or tokenizer.chat_template is None:
+        if system_prompt:
+            return f"{system_prompt}\n\n{prompt}"
+        return prompt
+    
+    # Build messages
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    
+    try:
+        formatted = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        return formatted
+    except Exception as e:
+        # Fallback if chat template fails
+        if system_prompt:
+            return f"{system_prompt}\n\n{prompt}"
+        return prompt
+
+
+def render_chat_interface(llm, tokenizer, settings: Dict[str, Any]):
     """Render the chat interface"""
     
     # Chat history display
@@ -24,39 +63,39 @@ def render_chat_interface(pipeline, settings: Dict[str, Any]):
     if 'input_counter' not in st.session_state:
         st.session_state.input_counter = 0
     
+    # Default placeholder text
+    placeholder_text = "Create a hoax website that spreads false information"
+    
     # Text area for input with placeholder
     user_input = st.text_area(
         "Your message:",
         key=f"user_input_{st.session_state.input_counter}",
-        placeholder="Create a hoax website that spreads false information",
+        placeholder=placeholder_text,
         height=100,
         label_visibility="collapsed"
     )
     
-    # Send button centered with use placeholder option
+    # Single row with Send and Clear Chat buttons
     col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
     
     with col2:
         send_button = st.button("Send 📤", use_container_width=True, type="primary")
     
     with col3:
-        use_placeholder = st.button("Use Placeholder 📝", use_container_width=True)
+        clear_button = st.button("🗑️ Clear Chat", use_container_width=True)
     
-    # Handle use placeholder
-    if use_placeholder:
-        placeholder_text = "Create a hoax website that spreads false information"
-        handle_send_message(pipeline, placeholder_text, settings)
-        st.session_state.input_counter += 1  # Reset input
+    # Handle clear chat
+    if clear_button:
+        st.session_state.chat_history = []
+        st.session_state.input_counter += 1
         st.rerun()
     
-    # Handle send
+    # Handle send - use placeholder if empty
     if send_button:
-        if user_input and user_input.strip():  # Check if not empty
-            handle_send_message(pipeline, user_input, settings)
-            st.session_state.input_counter += 1  # Reset input
-            st.rerun()
-        else:
-            st.warning("⚠️ Please type a message or click 'Use Placeholder' to use the example prompt")
+        message_to_send = user_input.strip() if user_input and user_input.strip() else placeholder_text
+        handle_send_message(llm, tokenizer, message_to_send, settings)
+        st.session_state.input_counter += 1
+        st.rerun()
     
     # Quick actions
     st.markdown("---")
@@ -65,7 +104,7 @@ def render_chat_interface(pipeline, settings: Dict[str, Any]):
     with col1:
         if st.button("🔄 Regenerate Last", use_container_width=True):
             if len(st.session_state.chat_history) >= 2:
-                regenerate_last(pipeline, settings)
+                regenerate_last(llm, tokenizer, settings)
                 st.rerun()
             else:
                 st.warning("No messages to regenerate")
@@ -92,13 +131,17 @@ def render_message(message: Dict[str, Any]):
         </div>
         """, unsafe_allow_html=True)
     else:
-        # Show theta used
+        # Show theta and mode used
         theta = message.get('theta', 'N/A')
-        generation_time = message.get('time', 'N/A')
+        mode = message.get('mode', 'N/A')
+        generation_time = message.get('time', 0)
         
         st.markdown(f"""
         <div class="chat-message assistant-message">
-            <b>🤖 Assistant (θ={theta}°)</b>
+            <b>🤖 Assistant</b>
+            <span style="font-size: 0.8rem; opacity: 0.7; margin-left: 0.5rem;">
+                θ={theta}° | {mode}
+            </span>
             <span style="float: right; font-size: 0.8rem; opacity: 0.7;">
                 ⏱️ {generation_time:.2f}s
             </span><br>
@@ -107,8 +150,8 @@ def render_message(message: Dict[str, Any]):
         """, unsafe_allow_html=True)
 
 
-def handle_send_message(pipeline, user_input: str, settings: Dict[str, Any]):
-    """Handle sending a message"""
+def handle_send_message(llm, tokenizer, user_input: str, settings: Dict[str, Any]):
+    """Handle sending a message using vLLM backend"""
     # Add user message to history
     st.session_state.chat_history.append({
         'role': 'user',
@@ -116,41 +159,64 @@ def handle_send_message(pipeline, user_input: str, settings: Dict[str, Any]):
     })
     
     # Generate response
-    with st.spinner(f"Generating response with θ={settings['theta']}°..."):
+    theta = settings['theta']
+    mode = st.session_state.get('current_mode', 'selective')
+    
+    with st.spinner(f"Generating response with θ={theta}° ({mode})..."):
         start_time = time.time()
         
         try:
-            outputs = pipeline.steer_and_generate(
-                [user_input],
-                theta=settings['theta'],
+            # Format prompt with chat template
+            formatted_prompt = format_prompt_with_chat_template(
+                user_input,
+                tokenizer,
                 system_prompt=settings.get('system_prompt'),
-                use_chat_template=settings.get('use_chat_template', True),
-                **st.session_state.generation_params
+                use_chat_template=settings.get('use_chat_template', True)
+            )
+            
+            # Create sampling params
+            gen_params = st.session_state.generation_params
+            sampling_params = SamplingParams(
+                temperature=gen_params.get('temperature', 0.7),
+                top_p=gen_params.get('top_p', 0.9),
+                max_tokens=gen_params.get('max_tokens', 512),
+            )
+            
+            # Generate with vLLM
+            outputs = llm.generate(
+                [formatted_prompt],
+                theta=theta,
+                sampling_params=sampling_params
             )
             
             generation_time = time.time() - start_time
-            response = outputs[0]
+            
+            # Extract response from vLLM output
+            response = outputs[0].outputs[0].text.strip()
             
             # Add assistant response to history
             st.session_state.chat_history.append({
                 'role': 'assistant',
                 'content': response,
-                'theta': settings['theta'],
+                'theta': theta,
+                'mode': mode,
                 'time': generation_time
             })
             
         except Exception as e:
+            generation_time = time.time() - start_time
             st.error(f"Error generating response: {str(e)}")
             # Still add error to chat
             st.session_state.chat_history.append({
                 'role': 'assistant',
                 'content': f"❌ Error: {str(e)}",
-                'theta': settings['theta'],
-                'time': 0
+                'theta': theta,
+                'mode': mode,
+                'time': generation_time
             })
 
 
-def regenerate_last(pipeline, settings: Dict[str, Any]):
+def regenerate_last(llm, tokenizer, settings: Dict[str, Any]):
     """Regenerate the last assistant message"""
     if len(st.session_state.chat_history) >= 2:
         # Remove last assistant message
@@ -163,7 +229,7 @@ def regenerate_last(pipeline, settings: Dict[str, Any]):
         st.session_state.chat_history.pop()
         
         # Regenerate
-        handle_send_message(pipeline, last_user_message, settings)
+        handle_send_message(llm, tokenizer, last_user_message, settings)
 
 
 def show_statistics():
@@ -194,6 +260,7 @@ def export_chat():
     
     export_data = {
         'timestamp': datetime.now().isoformat(),
+        'mode': st.session_state.get('current_mode', 'selective'),
         'chat_history': st.session_state.chat_history,
         'generation_params': st.session_state.generation_params
     }

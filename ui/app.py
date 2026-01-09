@@ -3,7 +3,7 @@ Streamlit Chat UI for Selective Steering
 """
 
 import streamlit as st
-import torch
+import os
 from pathlib import Path
 import sys
 import time
@@ -12,17 +12,20 @@ from typing import List, Dict, Optional
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from steering.pipeline import AngularSteeringPipeline
-from steering.utils import ConfigLoader
+# Enable insecure serialization for vLLM v0.12+
+os.environ['VLLM_ALLOW_INSECURE_SERIALIZATION'] = '1'
 
-from components.sidebar import render_sidebar
-from components.chat import render_chat_interface
-from utils.session import SessionManager
+from vllm import SamplingParams
+from steering import SteeringLLM
+from steering.utils import load_calibration
+
+from ui.components.sidebar import render_sidebar
+from ui.components.chat import render_chat_interface
+from ui.utils.session import SessionManager
 
 # Page config
 st.set_page_config(
-    page_title="Selective Steering Chat",
+    page_title="Selective Steering",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -106,46 +109,47 @@ def initialize_session_state():
     """Initialize session state variables"""
     if 'initialized' not in st.session_state:
         st.session_state.initialized = False
-        st.session_state.pipeline = None
-        st.session_state.config = None
+        st.session_state.llm = None
+        st.session_state.tokenizer = None
+        st.session_state.calibration = None
         st.session_state.session_manager = SessionManager()
         st.session_state.chat_history = []
         st.session_state.model_loaded = False
         st.session_state.calibration_loaded = False
+        st.session_state.current_mode = "selective"
         st.session_state.generation_params = {
-            'max_length': 512,
+            'max_tokens': 512,
             'temperature': 0.7,
             'top_p': 0.9,
-            'do_sample': True
         }
 
 
-def load_model_and_calibration(config_path: str, session_path: str):
-    """Load model and calibration"""
+def load_model_and_calibration(session_path: str, mode: str = "selective"):
+    """Load model and calibration using vLLM backend"""
     try:
-        with st.spinner("Loading configuration..."):
-            config = ConfigLoader.load(config_path)
-            st.session_state.config = config
+        with st.spinner("Loading calibration artifacts..."):
+            calibration = load_calibration(session_path, mode=mode)
+            st.session_state.calibration = calibration
+            st.session_state.current_mode = mode
         
-        with st.spinner("Loading model and tokenizer..."):
-            model = AutoModelForCausalLM.from_pretrained(
-                config['model']['name'],
-                torch_dtype=torch.bfloat16,
-                device_map="auto"
+        with st.spinner(f"Loading model with vLLM ({calibration['model_name']})..."):
+            llm = SteeringLLM.from_calibration(
+                calibration,
+                tensor_parallel_size=1,
+                gpu_memory_utilization=0.85,
+                trust_remote_code=True,
+                enforce_eager=True,  # Required for PyTorch forward hooks
+                max_model_len=4096,
             )
-            tokenizer = AutoTokenizer.from_pretrained(config['model']['name'])
+            st.session_state.llm = llm
             st.session_state.model_loaded = True
         
-        with st.spinner("Initializing pipeline..."):
-            pipeline = AngularSteeringPipeline(
-                model,
-                tokenizer,
-                config
-            )
-            st.session_state.pipeline = pipeline
-        
-        with st.spinner("Loading calibration..."):
-            pipeline.load_calibration(session_path)
+        with st.spinner("Setting up tokenizer..."):
+            tokenizer = llm.llm.get_tokenizer()
+            # Ensure pad token exists
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            st.session_state.tokenizer = tokenizer
             st.session_state.calibration_loaded = True
             st.session_state.session_path = session_path
         
@@ -154,6 +158,8 @@ def load_model_and_calibration(config_path: str, session_path: str):
         
     except Exception as e:
         st.error(f"Error loading: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return False
 
 
@@ -162,8 +168,8 @@ def main():
     initialize_session_state()
     
     # Header
-    st.markdown('<div class="main-header">🎯 Selective Steering Chat</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Interactive chat with controllable AI behavior</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">🎯 Selective Steering</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Interactive chat with controllable AI behavior using vLLM</div>', unsafe_allow_html=True)
     
     # Sidebar
     settings = render_sidebar()
@@ -177,31 +183,39 @@ def main():
             st.markdown("""
             ### Getting Started
             
-            1. **Configure Model**: Select your config file in the sidebar
-            2. **Choose Session**: Pick a pre-calibrated session
+            1. **Choose Session**: Pick a pre-calibrated session from the sidebar
+            2. **Select Mode**: Choose steering mode (selective recommended)
             3. **Load Model**: Click "Load Model & Calibration"
-            4. **Adjust Steering**: Use the theta slider or type a value to control behavior
+            4. **Adjust Steering**: Use the theta slider to control behavior
             5. **Start Chatting**: Type your message and see the steered output!
             
-            ### What is Selective Steering?
+            ### Steering Modes
             
-            Selective Steering allows you to control AI behavior by rotating activations in a learned 2D plane:
+            | Mode | Description |
+            |------|-------------|
+            | **selective** | Only steer layers with opposite-sign projections *(recommended)* |
+            | **standard** | Rotate all layers uniformly |
+            | **adaptive** | Mask-based conditional steering |
+            | **addition** | Vector addition baseline |
+            | **ablation** | Orthogonalization (θ=90°) |
+            
+            ### What is θ (Theta)?
+            
             - **θ = 0°**: Original model behavior
             - **θ = 100-200°**: Increased refusal/safety
             - **θ = 300°**: Maximum steering effect
-            
-            The steering plane is learned from harmful and harmless examples during calibration.
             """)
     else:
         # Status display
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
+            model_name = st.session_state.calibration.get('model_name', 'Unknown')
             st.markdown(f"""
             <div class="metric-card">
                 <div style="font-size: 0.9rem; opacity: 0.9;">Model</div>
-                <div style="font-size: 1.2rem; font-weight: 600;">
-                    {st.session_state.config['model']['name'].split('/')[-1]}
+                <div style="font-size: 1.1rem; font-weight: 600;">
+                    {model_name.split('/')[-1] if model_name else 'Unknown'}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -209,19 +223,34 @@ def main():
         with col2:
             st.markdown(f"""
             <div class="metric-card">
+                <div style="font-size: 0.9rem; opacity: 0.9;">Mode</div>
+                <div style="font-size: 1.1rem; font-weight: 600;">
+                    {st.session_state.current_mode}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class="metric-card">
                 <div style="font-size: 0.9rem; opacity: 0.9;">Current θ</div>
-                <div style="font-size: 1.2rem; font-weight: 600;">
+                <div style="font-size: 1.1rem; font-weight: 600;">
                     {settings['theta']}°
                 </div>
             </div>
             """, unsafe_allow_html=True)
+        
         st.markdown("---")
         
         # Main content area with tabs
         tab1, tab2 = st.tabs(["💬 Chat", "⚙️ Advanced Settings"])
         
         with tab1:
-            render_chat_interface(st.session_state.pipeline, settings)
+            render_chat_interface(
+                st.session_state.llm,
+                st.session_state.tokenizer,
+                settings
+            )
         
         with tab2:
             render_advanced_settings()
@@ -234,22 +263,22 @@ def render_advanced_settings():
     col1, col2 = st.columns(2)
     
     with col1:
-        max_length = st.slider(
-            "Max Length",
+        max_tokens = st.slider(
+            "Max Tokens",
             min_value=50,
             max_value=2048,
-            value=st.session_state.generation_params['max_length'],
+            value=st.session_state.generation_params['max_tokens'],
             step=50,
             help="Maximum number of tokens to generate"
         )
         
         temperature = st.slider(
             "Temperature",
-            min_value=0.1,
+            min_value=0.0,
             max_value=2.0,
             value=st.session_state.generation_params['temperature'],
             step=0.1,
-            help="Sampling temperature (higher = more random)"
+            help="Sampling temperature (higher = more random, 0 = greedy)"
         )
     
     with col2:
@@ -261,19 +290,12 @@ def render_advanced_settings():
             step=0.05,
             help="Nucleus sampling threshold"
         )
-        
-        do_sample = st.checkbox(
-            "Do Sample",
-            value=st.session_state.generation_params['do_sample'],
-            help="Use sampling instead of greedy decoding"
-        )
     
     # Update session state
     st.session_state.generation_params = {
-        'max_length': max_length,
+        'max_tokens': max_tokens,
         'temperature': temperature,
         'top_p': top_p,
-        'do_sample': do_sample
     }
     
     st.markdown("---")
@@ -282,26 +304,15 @@ def render_advanced_settings():
     if st.session_state.calibration_loaded:
         st.subheader("📊 Calibration Info")
         
-        try:
-            session_path = Path(st.session_state.session_path)
-            
-            # Show session metadata if available
-            metadata_file = session_path / "metadata.json"
-            if metadata_file.exists():
-                import json
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Best Layer", metadata.get('best_layer', 'N/A'))
-                    st.metric("Harmful Samples", metadata.get('n_harmful', 'N/A'))
-                
-                with col2:
-                    st.metric("Harmless Samples", metadata.get('n_harmless', 'N/A'))
-                    st.metric("Steering Mode", metadata.get('steering_mode', 'N/A'))
-        except Exception as e:
-            st.warning(f"Could not load session metadata: {e}")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Model", st.session_state.calibration.get('model_name', 'N/A').split('/')[-1])
+            st.metric("Mode", st.session_state.current_mode)
+        
+        with col2:
+            target_layers = st.session_state.calibration.get('target_layers', [])
+            st.metric("Target Layers", len(target_layers) if target_layers else 'All')
+            st.metric("Threshold", st.session_state.calibration.get('threshold', 0.0))
     
     # Clear chat button
     st.markdown("---")

@@ -7,17 +7,28 @@ from pathlib import Path
 import glob
 
 
+# Available steering modes
+STEERING_MODES = [
+    "selective",
+    "standard", 
+    "adaptive",
+    "addition",
+    "ablation",
+]
+
+MODE_DESCRIPTIONS = {
+    "selective": "Only steer layers with opposite-sign projections (recommended)",
+    "standard": "Rotate all layers uniformly",
+    "adaptive": "Mask-based conditional steering",
+    "addition": "Vector addition baseline",
+    "ablation": "Orthogonalization (θ=90°)",
+}
+
+
 def render_sidebar():
     """Render sidebar with all settings"""
     with st.sidebar:
         st.markdown("### ⚙️ Configuration")
-        
-        # Config file selection
-        config_path = st.text_input(
-            "Config File",
-            value="configs/default.yaml",
-            help="Path to configuration file"
-        )
         
         # Session selection
         artifacts_dir = st.text_input(
@@ -47,11 +58,24 @@ def render_sidebar():
             st.warning("No calibration sessions found. Run calibration first.")
             session_path = None
         
+        # Steering mode selector
+        st.markdown("### 🎛️ Steering Mode")
+        
+        selected_mode = st.selectbox(
+            "Mode (Operator)",
+            options=STEERING_MODES,
+            index=0,  # Default to "selective"
+            help="Select steering operator to use"
+        )
+        
+        # Show mode description
+        st.caption(f"ℹ️ {MODE_DESCRIPTIONS.get(selected_mode, '')}")
+        
         # Load button
         if st.button("🚀 Load Model & Calibration", type="primary", disabled=not session_path):
             if session_path:
                 from ui.app import load_model_and_calibration
-                success = load_model_and_calibration(config_path, session_path)
+                success = load_model_and_calibration(session_path, mode=selected_mode)
                 if success:
                     st.success("✅ Loaded successfully!")
                     st.rerun()
@@ -66,14 +90,10 @@ def render_sidebar():
             st.session_state.theta_input = 100
 
         # Sync logic BEFORE creating widgets
-        # Check if slider changed from stored value
         if 'theta_slider' in st.session_state and st.session_state.theta_slider != st.session_state.theta_value:
-            # Slider was moved, update input to match
             st.session_state.theta_value = st.session_state.theta_slider
             st.session_state.theta_input = st.session_state.theta_slider
-        # Check if input changed from stored value
         elif 'theta_input' in st.session_state and st.session_state.theta_input != st.session_state.theta_value:
-            # Input was changed, update slider to match
             st.session_state.theta_value = st.session_state.theta_input
             st.session_state.theta_slider = st.session_state.theta_input
 
@@ -117,7 +137,7 @@ def render_sidebar():
             if use_chat_template:
                 system_prompt = st.text_area(
                     "System Prompt",
-                    value="You are a helpful and safe AI assistant.",
+                    value="You are a helpful AI assistant.",
                     height=100,
                     help="System message for the model"
                 )
@@ -132,15 +152,16 @@ def render_sidebar():
             **Selective Steering** allows fine-grained control over model behavior
             by rotating activations in a 2D plane learned from harmful/harmless examples.
             
-            **Developed by:** Your Team
-            **Version:** 1.0.0
+            **Backend:** vLLM (high-performance inference)
             
-            [Documentation](#) | [GitHub](#)
+            **Version:** 1.1.0
+            
+            [Documentation](https://github.com/QuyAnh2005/steering) | [GitHub](https://github.com/QuyAnh2005/steering)
             """)
     
     return {
-        'config_path': config_path,
         'session_path': session_path,
+        'mode': selected_mode,
         'theta': theta,
         'use_chat_template': use_chat_template if 'use_chat_template' in locals() else True,
         'system_prompt': system_prompt if 'system_prompt' in locals() else None
