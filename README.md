@@ -2,8 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Paper](https://img.shields.io/badge/arXiv-2501.xxxxx-b31b1b.svg)](https://arxiv.org/abs/2501.xxxxx)
 
-A Python library for controlling Large Language Model behaviors through activation space rotation using Selective Steering techniques.
+**Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection**
+
+A Python library for controlling Large Language Model behaviors through activation space manipulation. This repository contains the official implementation of our paper introducing **Selective Steering**, a principled approach that combines discriminative layer selection with norm-preserving rotations for robust behavioral control.
+
+---
 
 ## Overview
 
