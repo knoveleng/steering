@@ -565,6 +565,27 @@ class SelectiveSteeringOperator(AngularSteeringOperator):
         if require_all_at_index:
             layer_steering_mask = SelectiveSteeringOperator._filter_by_index(layer_steering_mask)
 
+        ## TO DO: Un-comment the following lines to use a different selection method
+        # layer_steering_mask = {layer_name: True for layer_name in positive_activations.keys()}
+
+        # # Modify for ablation study
+        # import random
+        # random.seed(42)
+
+        # # Convert keys to list for indexing
+        # # layer_names = list(layer_steering_mask.keys())
+        # # half_size = len(layer_names) // 2
+
+        # # Case 1: First half of layers True, rest False
+        # # layer_steering_mask = {layer_name: (i < half_size) for i, layer_name in enumerate(layer_names)}
+
+        # # # Case 2: Second half of layers True, rest False
+        # # layer_steering_mask = {layer_name: (i >= half_size) for i, layer_name in enumerate(layer_names)}
+
+        # # # Case 3: Random half of layers True, rest False
+        # # random_half = set(random.sample(layer_names, half_size))
+        # # layer_steering_mask = {layer_name: (layer_name in random_half) for layer_name in layer_names}
+
         return layer_steering_mask
 
     @staticmethod
