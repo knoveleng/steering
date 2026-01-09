@@ -18,9 +18,9 @@ MODELS=(
 # Steering modes to evaluate
 STEERING_MODES=(
     # "addition"   # ignore because we can extract from best theta via standard mode
-    # "ablation"
-    # "standard"
-    # "adaptive"
+    "ablation"
+    "standard"
+    "adaptive"
     "selective"
 )
 
