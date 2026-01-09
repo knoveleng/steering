@@ -269,6 +269,62 @@ class SelectiveSteeringOperator(BaseSteeringOperator):
         
         # Apply rotation
         return hidden_states - proj_h + torch.matmul(hidden_states, V_theta.T)
+    
+
+# ## This operator is not used in the main code, only for ablation study
+# class SelectiveSteeringOperator(StandardSteeringOperator):
+#     """
+#     Selective steering with layer-specific rotation matrix - using formula from standard steering operator
+    
+#     Formula: h' = h - P*h + ||P*h|| * v_theta
+#     where v_theta = cos(θ)*b1 + sin(θ)*b2
+    
+#     Only steers on layers where the mask is True.
+#     """
+    
+#     def __init__(
+#         self, 
+#         b1: torch.Tensor, 
+#         b2: torch.Tensor, 
+#         layer_mask: Optional[Dict[str, bool]] = None
+#     ):
+#         super().__init__(b1, b2)
+#         self.layer_mask = layer_mask or {}
+    
+#     def should_steer(self, layer_name: str) -> bool:
+#         """Check if this layer should be steered."""
+#         if not self.layer_mask:
+#             return True
+#         return self.layer_mask.get(layer_name, False)
+    
+#     def steer(
+#         self,
+#         hidden_states: torch.Tensor,
+#         theta: float,
+#         layer_name: Optional[str] = None,
+#     ) -> torch.Tensor:
+#         """
+#         Apply standard steering: h' = h - P*h + ||P*h|| * v_theta
+#         Only steers if layer is in mask.
+#         """
+#         # Check layer mask
+#         if layer_name and not self.should_steer(layer_name):
+#             return hidden_states
+        
+#         device = hidden_states.device
+#         dtype = hidden_states.dtype
+        
+#         cached = self._get_device_tensors(device, dtype)
+#         v_theta = self._get_rotation_vector(theta, device, dtype)
+        
+#         # Project onto steering plane
+#         proj_h = torch.matmul(hidden_states, cached['P'].T)
+        
+#         # Compute magnitude
+#         r = torch.linalg.norm(proj_h, dim=-1, keepdim=True)
+        
+#         # Apply steering
+#         return hidden_states - proj_h + r * v_theta
 
 
 class AdditionSteeringOperator(BaseSteeringOperator):
