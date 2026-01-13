@@ -37,11 +37,12 @@ html {
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Aptos Serif', 'Georgia', 'Times New Roman', serif;
     background: var(--bg-white);
     color: var(--text-primary);
     line-height: 1.7;
     overflow-x: hidden;
+    font-size: 16px;
 }
 
 /* Typography */
@@ -49,6 +50,7 @@ h1,
 h2,
 h3,
 h4 {
+    font-family: 'Aptos Serif', 'Georgia', 'Times New Roman', serif;
     font-weight: 600;
     line-height: 1.3;
     color: var(--text-primary);
@@ -575,6 +577,8 @@ code {
     padding: 1rem;
     border-radius: 8px;
     border-left: 3px solid var(--accent);
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .example-response strong {
