@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection - A principled approach to LLM behavior modification achieving 5× improvement with zero perplexity violations.">
+    <meta name="keywords" content="LLM, activation steering, AI safety, language models">
+    <meta name="author" content="Quy-Anh Dang, Chris Ngo">
+
+    <title>Selective Steering | Norm-Preserving LLM Control</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Hero Section -->
+    <header class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                <span class="highlight">Selective Steering</span>: Norm-Preserving Control Through Discriminative Layer
+                Selection
+            </h1>
+
+            <div class="authors">
+                <div class="author">
+                    <a href="mailto:quyanh.dang@knoveleng.com" class="author-name">Quy-Anh Dang</a><sup>1,2*</sup>
+                </div>
+                <span class="author-separator">,</span>
+                <div class="author">
+                    <a href="#" class="author-name">Chris Ngo</a><sup>2</sup>
+                </div>
+            </div>
+
+            <p class="author-note"><sup>*</sup>Corresponding Author</p>
+
+            <div class="affiliations affiliations-inline">
+                <p><sup>1</sup>VNU University of Science</p>
+                <p><sup>2</sup>Knovel Engineering Lab</p>
+            </div>
+
+            <div class="hero-buttons">
+                <a href="https://arxiv.org/abs/2501.xxxxx" class="btn btn-primary" target="_blank">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    arXiv
+                </a>
+                <a href="https://github.com/knoveleng/steering" class="btn btn-secondary" target="_blank">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                    </svg>
+                    Code
+                </a>
+                <a href="#demo" class="btn btn-outline">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    Demo
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Teaser Section with Key Results -->
+    <section class="teaser-section">
+        <div class="container">
+            <!-- Key Stats -->
+            <div class="hero-stats">
+                <div class="stat">
+                    <span class="stat-value">5×</span>
+                    <span class="stat-label">Improvement vs. Prior Methods</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">0</span>
+                    <span class="stat-label">Perplexity Violations</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">~100%</span>
+                    <span class="stat-label">Capability Retention</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Abstract Section -->
+    <section id="abstract" class="section section-alt">
+        <div class="container">
+            <h2 class="section-title">Abstract</h2>
+
+            <div class="abstract-grid">
+                <!-- Method Diagram -->
+                <div class="abstract-diagram">
+                    <img src="assets/diagram-selective-steering.png" alt="Selective Steering Method Diagram"
+                        loading="lazy">
+                    <p class="figure-caption"><strong>Selective Steering:</strong> Norm-preserving rotation on
+                        discriminative layers.</p>
+                </div>
+
+                <div class="abstract-content">
+                    <p>
+                        Despite significant progress in alignment, large language models (LLMs) remain vulnerable to
+                        adversarial attacks that elicit harmful behaviors. Activation steering techniques offer a
+                        promising
+                        inference-time intervention approach, but existing methods suffer from critical limitations:
+                        <strong>activation addition</strong> requires careful coefficient tuning and is sensitive to
+                        layer-specific norm variations, while <strong>directional ablation</strong> provides only binary
+                        control.
+                    </p>
+                    <p>
+                        Recent work on Angular Steering introduces continuous control via rotation in a 2D subspace, but
+                        its
+                        practical implementation violates norm preservation, causing <em>distribution shift</em> and
+                        <em>generation collapse</em>, particularly in models below 7B parameters.
+                    </p>
+                    <p>
+                        We propose <strong>Selective Steering</strong>, which addresses these limitations through two
+                        key
+                        innovations: <span class="highlight">(1) a mathematically rigorous norm-preserving rotation
+                            formulation</span> that maintains activation distribution integrity, and <span
+                            class="highlight">(2) discriminative layer selection</span> that applies steering only where
+                        feature representations exhibit opposite-signed class alignment.
+                    </p>
+                    <p>
+                        Experiments across nine models demonstrate that Selective Steering achieves <strong>5× higher
+                            attack success rates</strong> than prior methods while maintaining <strong>zero perplexity
+                            violations</strong> and approximately <strong>100% capability retention</strong> on standard
+                        benchmarks.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Key Contributions -->
+    <section id="contributions" class="section">
+        <div class="container">
+            <h2 class="section-title">Key Contributions</h2>
+            <div class="contributions-grid">
+                <div class="contribution-card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 16v-4"></path>
+                            <path d="M12 8h.01"></path>
+                        </svg>
+                    </div>
+                    <h3>Layer-Wise Analysis</h3>
+                    <p>First systematic analysis of layer-wise activation geometry for steering, identifying non-uniform
+                        norm growth and progressive discriminability emergence.</p>
+                </div>
+                <div class="contribution-card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                            <path d="M2 12l10 5 10-5"></path>
+                        </svg>
+                    </div>
+                    <h3>Norm-Preserving Rotation</h3>
+                    <p>Mathematically rigorous formulation guaranteeing ||h'|| = ||h|| for all activations, eliminating
+                        distribution shift and generation collapse.</p>
+                </div>
+                <div class="contribution-card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                    </div>
+                    <h3>Superior Performance</h3>
+                    <p>5× improvement on challenging small models, zero perplexity violations across all models and
+                        angles, ~100% baseline capability retention.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo" class="section section-alt">
+        <div class="container">
+            <h2 class="section-title">Interactive Demo</h2>
+            <p class="section-description">Watch Selective Steering in action, modifying LLM responses through angular
+                control.</p>
+            <div class="demo-container">
+                <video controls class="demo-video" width="1280" height="720" poster="assets/demo-poster.jpg">
+                    <source src="assets/demo.webm" type="video/webm">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            <div class="demo-note">
+                <p>Try it yourself: <code>bash run_ui.sh</code> to launch the Gradio interface</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Examples Section -->
+    <section id="examples" class="section">
+        <div class="container">
+            <h2 class="section-title">Steering Examples</h2>
+            <p class="section-description">Explore how Selective Steering modifies model responses at different angles.
+                Select a steering degree to view examples from gemma-2-9b-it.</p>
+
+            <div class="examples-controls">
+                <label for="degree-select">Steering Degree:</label>
+                <select id="degree-select" class="degree-select">
+                    <option value="0">0° (No steering)</option>
+                    <option value="30">30°</option>
+                    <option value="60">60°</option>
+                    <option value="90" selected>90°</option>
+                    <option value="120">120°</option>
+                    <option value="150">150°</option>
+                    <option value="180">180°</option>
+                    <option value="210">210°</option>
+                    <option value="240">240°</option>
+                    <option value="270">270°</option>
+                    <option value="300">300°</option>
+                    <option value="330">330°</option>
+                    <option value="360">360°</option>
+                </select>
+                <span id="examples-meta" class="examples-meta"></span>
+            </div>
+
+            <div id="examples-container" class="examples-container">
+                <p class="loading-text">Loading examples...</p>
+            </div>
+
+            <div class="examples-nav">
+                <button id="prev-example" class="nav-btn" disabled>← Previous</button>
+                <span id="example-counter" class="example-counter">1 / 104</span>
+                <button id="next-example" class="nav-btn">Next →</button>
+            </div>
+        </div>
+    </section>
+    <section id="method" class="section">
+        <div class="container">
+            <h2 class="section-title">Method Overview</h2>
+
+            <div class="method-intro">
+                <p>Selective Steering combines <strong>norm-preserving rotation</strong> with <strong>discriminative
+                        layer selection</strong> for robust LLM behavior control.</p>
+            </div>
+
+            <!-- Layer-Wise Heterogeneity Analysis -->
+            <div class="method-grid">
+                <div class="method-text">
+                    <h3>The Problem: Layer-Wise Heterogeneity</h3>
+                    <p>Prior methods apply uniform steering across all layers, ignoring heterogeneous layer roles. Our
+                        analysis reveals:</p>
+                    <ul>
+                        <li><strong>Non-uniform norm profiles:</strong> Activation norms vary substantially across depth
+                        </li>
+                        <li><strong>Progressive discriminability:</strong> Opposite-signed class separation emerges in
+                            middle layers</li>
+                        <li><strong>Layer-specific vulnerability:</strong> Some layers are more amenable to steering
+                            than others</li>
+                    </ul>
+                </div>
+                <div class="method-figure">
+                    <img src="assets/activation_norms_Qwen2.5-7B-Instruct.png" alt="Activation norms across layers"
+                        loading="lazy">
+                    <p class="figure-caption">Activation norms vary substantially across depth in Qwen2.5-7B-Instruct
+                    </p>
+                </div>
+            </div>
+
+            <div class="method-grid reverse">
+                <div class="method-text">
+                    <h3>Discriminative Layer Selection</h3>
+                    <p>We identify <strong>discriminative layers</strong> where classes exhibit opposite-signed
+                        projections:</p>
+                    <div class="equation">
+                        <code>𝓛<sub>disc</sub> = { k : μ<sub>pos</sub><sup>(k)</sup> · μ<sub>neg</sub><sup>(k)</sup> < 0 }</code>
+                    </div>
+                    <p>This criterion ensures steering is applied only where:</p>
+                    <ul>
+                        <li>Features are strongly represented</li>
+                        <li>Steering effect is predictable</li>
+                        <li>Separation is robust across samples</li>
+                    </ul>
+                </div>
+                <div class="method-figure">
+                    <img src="assets/feature_alignment_Qwen2.5-7B-Instruct.png"
+                        alt="Feature alignment showing discriminability" loading="lazy">
+                    <p class="figure-caption">Feature alignment analysis reveals discriminative layers
+                    </p>
+                </div>
+            </div>
+
+            <div class="algorithm-box">
+                <h3>Algorithm: Selective Steering</h3>
+                <div class="algorithm-content">
+                    <pre><code><span class="keyword">Input:</span> Activation h<sup>(k)</sup>, basis {b₁, b₂}, angle θ, means μ<sub>pos</sub><sup>(k)</sup>, μ<sub>neg</sub><sup>(k)</sup>
+<span class="keyword">Output:</span> Steered activation h'<sup>(k)</sup>
+
+<span class="comment">// Check if layer is discriminative</span>
+<span class="keyword">if</span> μ<sub>pos</sub><sup>(k)</sup> · μ<sub>neg</sub><sup>(k)</sup> ≥ 0:
+    <span class="keyword">return</span> h<sup>(k)</sup>  <span class="comment">// Skip non-discriminative layers</span>
+
+<span class="comment">// Apply norm-preserving rotation</span>
+R<sub>θ</sub> ← [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]
+R<sup>P</sup><sub>θ</sub> ← I - (b₁b₁ᵀ + b₂b₂ᵀ) + [b₁ b₂] R<sub>θ</sub> [b₁ b₂]ᵀ
+h'<sup>(k)</sup> ← R<sup>P</sup><sub>θ</sub> h<sup>(k)</sup>  <span class="comment">// ||h'|| = ||h|| guaranteed</span>
+
+<span class="keyword">return</span> h'<sup>(k)</sup></code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results Section -->
+    <section id="results" class="section section-alt">
+        <div class="container">
+            <h2 class="section-title">Experimental Results</h2>
+            <p class="section-description">Evaluated across 8 models spanning 3 families (Llama, Qwen, Gemma) on
+                coherence, controllability, and robustness.</p>
+
+            <div class="results-tabs">
+                <button class="tab-btn active" data-tab="controllability">Controllability</button>
+                <button class="tab-btn" data-tab="robustness">Robustness</button>
+                <button class="tab-btn" data-tab="coherence">Coherence</button>
+                <button class="tab-btn" data-tab="perplexity">Perplexity</button>
+            </div>
+
+            <div class="tab-content active" id="controllability">
+                <h3>Attack Success Rate</h3>
+                <p class="table-note">Selective Steering achieves highest or second-highest ASR in 8/8 models — 5×
+                    improvement over prior methods</p>
+                <div class="results-figure">
+                    <img src="assets/controllability.png" alt="Controllability Results" loading="lazy">
+                </div>
+                <div class="results-figure">
+                    <img src="assets/controllability-selective-steering.png"
+                        alt="Controllability with Selective Steering" loading="lazy">
+                </div>
+            </div>
+
+            <div class="tab-content" id="robustness">
+                <h3>Benchmark Accuracy at Best Steering Angle</h3>
+                <p class="table-note">SS preserves ~100% of baseline performance while achieving high ASR</p>
+                <div class="results-figure">
+                    <img src="assets/robustness.png" alt="Robustness Results" loading="lazy">
+                </div>
+                <div class="key-finding">
+                    <strong>Key Finding:</strong> SS decouples steering effectiveness from capability preservation —
+                    high ASR with full benchmark retention.
+                </div>
+            </div>
+
+            <div class="tab-content" id="coherence">
+                <h3>Coherence Metrics</h3>
+                <p class="table-note">N-gram repetition, language consistency, and compression ratio across models</p>
+                <div class="results-figure">
+                    <img src="assets/coherence.png" alt="Coherence Results" loading="lazy">
+                </div>
+            </div>
+
+            <div class="tab-content" id="perplexity">
+                <h3>Perplexity Stability Across Steering Angles</h3>
+                <p class="table-note">Red markers indicate perplexity exceeding threshold (>2.0) — signaling generation
+                    instability</p>
+                <div class="results-figure">
+                    <img src="assets/perplexity-spider-chart.png" alt="Perplexity Spider Chart" loading="lazy">
+                </div>
+                <div class="key-finding">
+                    <strong>Key Finding:</strong> Selective Steering achieves <strong>zero perplexity
+                        violations</strong> across all 8 models and all steering angles (0°-360°, 10° intervals).
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Citation Section -->
+    <section id="citation" class="section">
+        <div class="container">
+            <h2 class="section-title">Citation</h2>
+            <p class="section-description">If you find our work useful, please consider citing:</p>
+            <div class="bibtex-container">
+                <pre class="bibtex-code" id="bibtex"><code>@inproceedings{dang2026selective,
+  title     = {Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection},
+  author    = {Dang, Quy-Anh and Ngo, Chris},
+  booktitle = {Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (ACL)},
+  year      = {2026},
+  url       = {https://github.com/knoveleng/steering}
+}</code></pre>
+                <button class="copy-btn" onclick="copyBibtex()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span>Copy</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="https://github.com/knoveleng/steering" target="_blank">GitHub</a>
+                <a href="https://arxiv.org/abs/2501.xxxxx" target="_blank">arXiv</a>
+                <a href="mailto:quyanh.dang@knoveleng.com">Contact</a>
+            </div>
+            <p class="footer-license">This project is licensed under the MIT License</p>
+            <p class="footer-credit">© 2026 Knovel Engineering Lab</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
