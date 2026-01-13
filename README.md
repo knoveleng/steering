@@ -28,13 +28,15 @@ Selective Steering provides a principled approach to behavior modification in LL
 - 📊 **Built-in Evaluation**: Perplexity, jailbreak, and robustness evaluation
 - 🎨 **Multiple Steering Modes**: Standard, Adaptive, Selective, Addition, Ablation
 
-## Supported Models
+## Models
 
 | Family | Models |
 |--------|--------|
 | **Gemma** | `google/gemma-2-2b-it`, `google/gemma-2-9b-it` |
 | **LLaMA** | `meta-llama/Llama-3.2-1B-Instruct`, `meta-llama/Llama-3.2-3B-Instruct`, `meta-llama/Llama-3.1-8B-Instruct` |
 | **Qwen** | `Qwen/Qwen2.5-1.5B-Instruct`, `Qwen/Qwen2.5-3B-Instruct`, `Qwen/Qwen2.5-7B-Instruct` |
+
+**Note: You can also use other models by replacing the `name` of `model` in the configuration files.**
 
 ## Prerequisites
 
@@ -58,6 +60,11 @@ pip install -e ".[dev]"
 Chrome Driver (for visualization):
 ```bash
 bash google_chrome_install.sh
+```
+
+To access and download restricted models on Hugging Face, you need to login:
+```bash
+huggingface-cli login --token <your_token>
 ```
 
 ## Quick Start
