@@ -44,7 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const target = document.querySelector(targetId);
             if (target) {
-                const navHeight = document.querySelector('.navbar').offsetHeight;
+                const navbar = document.querySelector('.navbar');
+                const navHeight = navbar ? navbar.offsetHeight : 0;
                 const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - navHeight - 20;
 
                 window.scrollTo({
