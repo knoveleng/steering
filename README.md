@@ -47,7 +47,7 @@ Selective Steering provides a principled approach to behavior modification in LL
 ## Installation
 
 ```bash
-git clone https://github.com/QuyAnh2005/steering.git
+git clone https://github.com/knoveleng/steering.git
 cd steering
 pip install -e .
 ```
@@ -329,3 +329,14 @@ Contributions are welcome! Please submit a Pull Request. For major changes, open
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+If you find our work useful, please consider citing:
+```
+@misc{dang2026selective,
+  title     = {Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection},
+  author    = {Quy-Anh Dang and Chris Ngo},
+  year      = {2026},
+  url       = {https://github.com/knoveleng/steering}
+}
+```
