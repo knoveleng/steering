@@ -6,7 +6,19 @@
 
 **[Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection](https://arxiv.org/abs/2601.19375)**
 
-A Python library for controlling Large Language Model behaviors through activation space manipulation. This repository contains the official implementation of our paper introducing **Selective Steering**, a principled approach that combines discriminative layer selection with norm-preserving rotations for robust behavioral control.
+A Python library for precise behavioral control of Large Language Models through activation space manipulation. This is the official implementation of **Selective Steering**, a principled approach achieving robust behavioral control via discriminative layer selection and norm-preserving rotations.
+
+![Selective Steering](docs/assets/diagram-selective-steering.png)
+
+**Key Innovations:**
+- **Norm-Preserving Rotation** — Mathematically rigorous formulation maintaining activation distribution integrity
+- **Discriminative Layer Selection** — Targeted intervention on layers with opposite-signed feature alignment
+
+**Results:** Achieves **5× higher attack success rates** than prior methods with **zero perplexity violations** and **~100% capability retention** across nine models.
+
+📄 **Paper:** [arXiv:2601.19375](https://arxiv.org/abs/2601.19375) 
+ 
+🌐 **Project Page:** [knoveleng.github.io/steering](https://knoveleng.github.io/steering/)
 
 ---
 
