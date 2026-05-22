@@ -348,13 +348,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Citation
 If you find our work useful, please consider citing:
 ```
-@misc{dang2026selective,
-      title={Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection}, 
-      author={Quy-Anh Dang and Chris Ngo},
-      year={2026},
-      eprint={2601.19375},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2601.19375}, 
+@inproceedings{dang2026selective,
+    title={Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection},
+    author={Quy-Anh Dang and Chris Ngo},
+    booktitle={The 64th Annual Meeting of the Association for Computational Linguistics},
+    year={2026},
+    url={https://openreview.net/forum?id=clMjqk0ZcT}
 }
 ```
