@@ -348,11 +348,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Citation
 If you find our work useful, please consider citing:
 ```
-@inproceedings{dang2026selective,
-    title={Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection},
-    author={Quy-Anh Dang and Chris Ngo},
-    booktitle={The 64th Annual Meeting of the Association for Computational Linguistics},
-    year={2026},
-    url={https://openreview.net/forum?id=clMjqk0ZcT}
+@inproceedings{dang-ngo-2026-selective,
+    title = "Selective Steering: Norm-Preserving Control Through Discriminative Layer Selection",
+    author = "Dang, Quy-Anh  and
+      Ngo, Chris",
+    editor = "Liakata, Maria  and
+      Moreira, Viviane P.  and
+      Zhang, Jiajun  and
+      Jurgens, David",
+    booktitle = "Findings of the {A}ssociation for {C}omputational {L}inguistics: {ACL} 2026",
+    month = jul,
+    year = "2026",
+    address = "San Diego, California, United States",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2026.findings-acl.529/",
+    doi = "10.18653/v1/2026.findings-acl.529",
+    pages = "10887--10910",
+    ISBN = "979-8-89176-395-1",
+    abstract = "Despite significant progress in alignment, large language models (LLMs) remain vulnerable to adversarial attacks that elicit harmful behaviors. Activation steering techniques offer a promising inference-time intervention approach, but existing methods suffer from critical limitations: activation addition requires careful coefficient tuning and is sensitive to layer-specific norm variations, while directional ablation provides only binary control. Recent work on Angular Steering introduces continuous control via rotation in a 2D subspace, but its practical implementation violates norm preservation, causing distribution shift and generation collapse, particularly in models below 7B parameters. We propose \textbf{Selective Steering}, which addresses these limitations through two key innovations: (1) a mathematically rigorous norm-preserving rotation formulation that maintains activation distribution integrity, and (2) discriminative layer selection that applies steering only where feature representations exhibit opposite-signed class alignment. Experiments across nine models demonstrate that Selective Steering achieves 5.5 higher attack success rates than prior methods while maintaining zero perplexity violations and approximately 100{\%} capability retention on standard benchmarks. Our approach provides a principled, efficient framework for controllable and stable LLM behavior modification."
 }
 ```
